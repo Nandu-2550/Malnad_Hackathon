@@ -1,0 +1,19 @@
+{
+  "name": "reviver",
+  "version": "1.0.0",
+  "description": "REVIVER - Standalone Desktop Digital Forensics & Data Reconstruction Suite",
+  "scripts": {
+    "dev": "python calmstacks-reconstructor/app.py",
+    "start": "python calmstacks-reconstructor/app.py",
+    "carve": "python calmstacks-reconstructor/engine.py calmstacks-reconstructor/sample_dump.bin"
+  },
+  "keywords": [
+    "reviver",
+    "digital-forensics",
+    "data-carving",
+    "customtkinter",
+    "python"
+  ],
+  "author": "",
+  "license": "ISC"
+}
