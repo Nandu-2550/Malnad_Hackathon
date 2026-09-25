@@ -8,6 +8,7 @@ heuristic classification, and structural integrity assessment.
 
 import os
 import sys
+import json
 import threading
 import time
 from typing import List, Optional, Dict, Any
