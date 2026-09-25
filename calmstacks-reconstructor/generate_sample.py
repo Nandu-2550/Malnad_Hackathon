@@ -116,6 +116,27 @@ def build_sample_dump(filepath: str):
     ).encode("utf-8")
     data[26 * SECTOR_SIZE : 26 * SECTOR_SIZE + len(sec26_text)] = sec26_text
 
+    # Sector 30 (Offset 15360): Unallocated PDF Document (Magic Byte Carving)
+    sec30_bytes = (
+        b"%PDF-1.7\n"
+        b"1 0 obj\n"
+        b"<< /Title (CONFIDENTIAL_ACQUISITION_TARGETS_Q4) /Classification (RESTRICTED) /Author (Corporate_Strategy) >>\n"
+        b"endobj\n"
+        b"2 0 obj\n"
+        b"<< /Target_1 (Apex Holdings) /Target_2 (Nordic Security Corp) /Proposed_Valuation ($14.2M) >>\n"
+        b"endobj\n"
+        b"%%EOF\n"
+    )
+    data[30 * SECTOR_SIZE : 30 * SECTOR_SIZE + len(sec30_bytes)] = sec30_bytes
+
+    # Sector 33 (Offset 16896): Unallocated PNG Image Signature (Magic Byte Carving)
+    sec33_bytes = (
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x01\x00\x00\x00\x01\x00\x08\x06\x00\x00\x00\x5c\x72\xa8\x66"
+        b"\x00\x00\x00\x19tEXtComment\x00FORENSIC_EXFILTRATED_SCHEMATIC"
+        b"\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+    data[33 * SECTOR_SIZE : 33 * SECTOR_SIZE + len(sec33_bytes)] = sec33_bytes
+
     with open(filepath, "wb") as f:
         f.write(data)
     print(f"Generated {filepath} ({len(data)} bytes, {TOTAL_SECTORS} sectors)")

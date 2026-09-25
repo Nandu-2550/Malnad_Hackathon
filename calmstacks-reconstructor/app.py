@@ -25,6 +25,7 @@ if CURRENT_DIR not in sys.path:
 
 from engine import (
     carve_disk_image,
+    disk_dig_carve,
     stitch_fragments,
     classify_and_prioritize,
     assess_integrity,
@@ -363,17 +364,31 @@ class ReviverApp(ctk.CTk):
         )
         self.lbl_current_file.pack(fill="x", pady=(0, 10))
 
-        # Big Action Button: Run AI Scan
+        # Action Buttons Row: Disk Dig (Raw Sector Carve) + AI Deep Scan
+        actions_frame = ctk.CTkFrame(control_frame, fg_color="transparent")
+        actions_frame.pack(fill="x", pady=(0, 8))
+
+        self.btn_disk_dig = ctk.CTkButton(
+            actions_frame,
+            text="⛏️ Disk Dig (Sector Carve)",
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            fg_color="#8957e5",
+            hover_color="#6e40c9",
+            height=42,
+            command=self._start_disk_dig_thread
+        )
+        self.btn_disk_dig.pack(side="left", fill="x", expand=True, padx=(0, 4))
+
         self.btn_run_scan = ctk.CTkButton(
-            control_frame,
-            text="⚡ Run AI Scan & Deep Carve",
-            font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"),
+            actions_frame,
+            text="⚡ AI Deep Scan",
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
             fg_color=COLOR_ACCENT,
             hover_color=COLOR_ACCENT_HOVER,
             height=42,
             command=self._start_scan_thread
         )
-        self.btn_run_scan.pack(fill="x", pady=(0, 8))
+        self.btn_run_scan.pack(side="right", fill="x", expand=True, padx=(4, 0))
 
         # Progress Bar (pulsing/indeterminate during scan)
         self.progress_bar = ctk.CTkProgressBar(
@@ -913,8 +928,54 @@ class ReviverApp(ctk.CTk):
                 messagebox.showerror("Export Error", f"Failed to export artifact:\n{e}")
 
     # =========================================================================
-    # FORENSIC SCAN EXECUTION (ASYNC THREAD)
+    # FORENSIC SCAN & DISK DIG EXECUTION (ASYNC THREADS)
     # =========================================================================
+    def _start_disk_dig_thread(self):
+        """Dedicated Disk Dig raw sector-level carver bypassing file system allocation tables."""
+        if self.is_scanning:
+            return
+
+        if not self.target_file_path or not os.path.exists(self.target_file_path):
+            messagebox.showwarning("File Missing", "Please select a valid disk dump image before running Disk Dig.")
+            return
+
+        self.is_scanning = True
+        self.btn_disk_dig.configure(state="disabled", text="⛏️ Digging Sectors...")
+        self.btn_run_scan.configure(state="disabled")
+        self.btn_select_file.configure(state="disabled")
+        self._set_status_badge("SECTOR CARVING...", mode="SCANNING")
+        self.progress_bar.configure(mode="indeterminate")
+        self.progress_bar.start()
+
+        # Log Disk Dig action to ledger
+        self.ledger.add_entry("DISK_DIG_START", {
+            "target": os.path.basename(self.target_file_path),
+            "mode": "RAW_SECTOR_MAGIC_BYTE_CARVE"
+        })
+
+        thread = threading.Thread(target=self._run_disk_dig_worker, daemon=True)
+        thread.start()
+
+    def _run_disk_dig_worker(self):
+        try:
+            self.event_queue.put(("STATUS", ("⛏️ Disk Dig: Reading raw binary stream sector-by-sector...", False)))
+            time.sleep(0.3)
+            self.event_queue.put(("STATUS", ("⛏️ Disk Dig: Hunting for magic byte signatures (JPEG, PNG, PDF, ZIP, ELF)...", False)))
+            time.sleep(0.3)
+            fragments = disk_dig_carve(self.target_file_path)
+
+            self.event_queue.put(("STATUS", (f"⛏️ Disk Dig: Carved {len(fragments)} unallocated fragments. Correlating relationships...", False)))
+            time.sleep(0.3)
+            artifacts = stitch_fragments(fragments)
+
+            self.event_queue.put(("STATUS", ("⛏️ Disk Dig: Assessing Shannon entropy & structural health...", False)))
+            time.sleep(0.2)
+            prioritized = classify_and_prioritize(artifacts)
+
+            self.event_queue.put(("COMPLETE", (fragments, prioritized)))
+        except Exception as e:
+            self.event_queue.put(("FAILED", str(e)))
+
     def _start_scan_thread(self):
         if self.is_scanning:
             return
@@ -924,7 +985,8 @@ class ReviverApp(ctk.CTk):
             return
 
         self.is_scanning = True
-        self.btn_run_scan.configure(state="disabled", text="Scanning Target File...")
+        self.btn_run_scan.configure(state="disabled", text="⚡ Scanning Deep...")
+        self.btn_disk_dig.configure(state="disabled")
         self.btn_select_file.configure(state="disabled")
         self._set_status_badge("SCANNING FILE...", mode="SCANNING")
         self.progress_bar.configure(mode="indeterminate")
@@ -941,7 +1003,7 @@ class ReviverApp(ctk.CTk):
         try:
             self.event_queue.put(("STATUS", ("Step 1/4: Reading binary image and carving sectors...", False)))
             time.sleep(0.3)
-            fragments = carve_disk_image(self.target_file_path)
+            fragments = disk_dig_carve(self.target_file_path)
 
             self.event_queue.put(("STATUS", (f"Step 2/4: Carved {len(fragments)} candidate fragments. Correlating graph relationships...", False)))
             time.sleep(0.3)
@@ -964,7 +1026,8 @@ class ReviverApp(ctk.CTk):
         self.progress_bar.stop()
         self.progress_bar.configure(mode="determinate")
         self.progress_bar.set(1.0)
-        self.btn_run_scan.configure(state="normal", text="⚡ Run AI Scan & Deep Carve")
+        self.btn_disk_dig.configure(state="normal", text="⛏️ Disk Dig (Sector Carve)")
+        self.btn_run_scan.configure(state="normal", text="⚡ AI Deep Scan")
         self.btn_select_file.configure(state="normal")
         self._set_status_badge("ANALYSIS COMPLETE", mode="DONE")
 
@@ -1296,8 +1359,11 @@ CalmStacksReconstructorApp = ReviverApp
 
 
 def main():
-    app = ReviverApp()
-    app.mainloop()
+    try:
+        app = ReviverApp()
+        app.mainloop()
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == "__main__":
