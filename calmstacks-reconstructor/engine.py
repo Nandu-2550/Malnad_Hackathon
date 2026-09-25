@@ -14,7 +14,64 @@ import re
 import math
 import json
 import hashlib
+from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple, Union
+
+
+class ForensicLedger:
+    """Maintains a tamper-evident SHA-256 hash chain ledger for chain of custody."""
+    def __init__(self):
+        self.chain = []
+        self.add_entry("INITIALIZE_LEDGER", {"status": "Forensic workspace initialized"})
+
+    def add_entry(self, action: str, details: dict):
+        prev_hash = self.chain[-1]["current_hash"] if self.chain else "0" * 64
+        timestamp = datetime.utcnow().isoformat()
+
+        record = {
+            "index": len(self.chain),
+            "timestamp": timestamp,
+            "action": action,
+            "details": details,
+            "previous_hash": prev_hash
+        }
+
+        # Compute SHA-256 hash incorporating the previous block's hash
+        record_string = json.dumps(record, sort_keys=True)
+        current_hash = hashlib.sha256(record_string.encode('utf-8')).hexdigest()
+        record["current_hash"] = current_hash
+
+        self.chain.append(record)
+        return record
+
+
+def export_forensic_report(artifacts, ledger_chain, filepath="reviver_forensic_report.json"):
+    """Packages all artifacts, metadata, and the hash ledger into a signed JSON report."""
+    serialized_artifacts = []
+    for art in artifacts:
+        if isinstance(art, dict):
+            clean_art = dict(art)
+            if "links" in clean_art and isinstance(clean_art["links"], list):
+                clean_art["links"] = [
+                    l.to_dict() if hasattr(l, "to_dict") else l for l in clean_art["links"]
+                ]
+            serialized_artifacts.append(clean_art)
+        elif hasattr(art, "__dict__"):
+            serialized_artifacts.append(vars(art))
+        else:
+            serialized_artifacts.append(str(art))
+
+    report = {
+        "suite": "Reviver AI Digital Forensics & Evidence Reconstruction",
+        "export_timestamp": datetime.utcnow().isoformat(),
+        "total_artifacts": len(serialized_artifacts),
+        "artifacts": serialized_artifacts,
+        "chain_of_custody_ledger": ledger_chain,
+        "verification_signature": hashlib.sha256(json.dumps(serialized_artifacts, sort_keys=True, default=str).encode('utf-8')).hexdigest()
+    }
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(report, f, indent=4)
+    return filepath
 
 
 class ForensicArtifact(dict):

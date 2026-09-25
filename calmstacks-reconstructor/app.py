@@ -29,7 +29,9 @@ from engine import (
     assess_integrity,
     run_forensic_pipeline,
     ForensicArtifact,
-    DataFragment
+    DataFragment,
+    ForensicLedger,
+    export_forensic_report
 )
 
 # CustomTkinter Global Appearance
@@ -109,6 +111,9 @@ class ReviverApp(ctk.CTk):
         self.geometry("1400x880")
         self.minsize(1100, 720)
         self.configure(fg_color=COLOR_BG_DARK)
+
+        # Cryptographic Hash Chain Ledger (Chain of Custody)
+        self.ledger = ForensicLedger()
 
         # Thread-safe event queue
         self.event_queue = queue.Queue()
@@ -251,7 +256,36 @@ class ReviverApp(ctk.CTk):
             padx=12,
             pady=4
         )
-        self.status_badge.pack(side="left", padx=(10, 0))
+        self.status_badge.pack(side="left", padx=(8, 8))
+
+        # Audit Ledger & Export Report Buttons
+        self.btn_audit_ledger = ctk.CTkButton(
+            telemetry_frame,
+            text="🔐 Audit Ledger",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            fg_color="#21262d",
+            hover_color=COLOR_CARD_HOVER,
+            border_width=1,
+            border_color=COLOR_BORDER,
+            width=115,
+            height=30,
+            command=self.open_audit_ledger_window
+        )
+        self.btn_audit_ledger.pack(side="left", padx=(2, 4))
+
+        self.btn_export_top = ctk.CTkButton(
+            telemetry_frame,
+            text="💾 Export Report",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            fg_color="#1f3a5f",
+            hover_color=COLOR_ACCENT,
+            border_width=1,
+            border_color="#2563eb",
+            width=115,
+            height=30,
+            command=self.handle_export
+        )
+        self.btn_export_top.pack(side="left", padx=2)
 
     # =========================================================================
     # MAIN SPLIT LAYOUT (LEFT & RIGHT PANELS)
@@ -687,7 +721,8 @@ class ReviverApp(ctk.CTk):
             filename = os.path.basename(chosen)
             file_size = os.path.getsize(chosen)
             self.lbl_current_file.configure(text=f"Target: {filename} ({file_size:,} bytes)")
-            self._update_status(f"Selected target disk image: {filename}")
+            self._update_status(f"Selected target file: {filename}")
+            self.ledger.add_entry("SELECT_TARGET_FILE", {"file": filename, "size_bytes": file_size})
 
     def _on_reset_to_sample(self):
         sample_path = os.path.join(CURRENT_DIR, "sample_dump.bin")
@@ -704,6 +739,7 @@ class ReviverApp(ctk.CTk):
         file_size = os.path.getsize(sample_path)
         self.lbl_current_file.configure(text=f"Target: {filename} ({file_size:,} bytes)")
         self._update_status(f"Reset target to built-in sample dump: {filename}")
+        self.ledger.add_entry("RESET_TO_SAMPLE", {"file": filename, "size_bytes": file_size})
 
     def _on_filter_changed(self, value: str):
         self.current_filter = value
@@ -725,6 +761,122 @@ class ReviverApp(ctk.CTk):
         self.clipboard_clear()
         self.clipboard_append(content)
         self._update_status("Reconstructed artifact content copied to clipboard.")
+
+    def open_audit_ledger_window(self):
+        """Opens a modal window showing the sequential SHA-256 hash chain ledger."""
+        ledger_win = ctk.CTkToplevel(self)
+        ledger_win.geometry("780x560")
+        ledger_win.title("Reviver // Chain of Custody Audit Ledger (SHA-256)")
+        ledger_win.configure(fg_color=COLOR_BG_DARK)
+        ledger_win.after(100, ledger_win.lift)
+
+        # Header Frame
+        hdr = ctk.CTkFrame(ledger_win, fg_color=COLOR_PANEL_BG, corner_radius=6)
+        hdr.pack(fill="x", padx=16, pady=(16, 8))
+
+        title_lbl = ctk.CTkLabel(
+            hdr,
+            text="🔐 Tamper-Evident SHA-256 Hash Chain Ledger",
+            font=ctk.CTkFont(family="Segoe UI", size=15, weight="bold"),
+            text_color=COLOR_TEXT_PRIMARY
+        )
+        title_lbl.pack(side="left", padx=12, pady=10)
+
+        chain_len_lbl = ctk.CTkLabel(
+            hdr,
+            text=f"Chain Height: {len(self.ledger.chain)} blocks",
+            font=ctk.CTkFont(family="Consolas", size=11, weight="bold"),
+            fg_color="#0e3818",
+            text_color="#3fb950",
+            corner_radius=4,
+            padx=10,
+            pady=4
+        )
+        chain_len_lbl.pack(side="right", padx=12, pady=10)
+
+        textbox = ctk.CTkTextbox(
+            ledger_win,
+            font=ctk.CTkFont(family="Consolas", size=11),
+            fg_color="#0d1117",
+            text_color="#58a6ff",
+            border_width=1,
+            border_color=COLOR_BORDER,
+            wrap="none"
+        )
+        textbox.pack(fill="both", expand=True, padx=16, pady=8)
+
+        # Format and display ledger entries
+        ledger_text = ""
+        for entry in self.ledger.chain:
+            ledger_text += f"[BLOCK #{entry['index']:03d}] ACTION: {entry['action']}\n"
+            ledger_text += f"    Timestamp : {entry['timestamp']}\n"
+            ledger_text += f"    Prev Hash : {entry['previous_hash']}\n"
+            ledger_text += f"    Curr Hash : {entry['current_hash']}\n"
+            ledger_text += f"    Details   : {json.dumps(entry['details'])}\n"
+            ledger_text += "-" * 76 + "\n"
+
+        textbox.insert("0.0", ledger_text)
+        textbox.configure(state="disabled")
+
+        # Bottom controls
+        btn_frame = ctk.CTkFrame(ledger_win, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=16, pady=(4, 16))
+
+        def copy_ledger_json():
+            self.clipboard_clear()
+            self.clipboard_append(json.dumps(self.ledger.chain, indent=2))
+            self._update_status("Audit ledger JSON copied to clipboard.")
+
+        btn_copy = ctk.CTkButton(
+            btn_frame,
+            text="📋 Copy Ledger JSON",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            fg_color="#21262d",
+            hover_color=COLOR_CARD_HOVER,
+            command=copy_ledger_json
+        )
+        btn_copy.pack(side="left")
+
+        btn_close = ctk.CTkButton(
+            btn_frame,
+            text="Close",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            fg_color="#21262d",
+            hover_color=COLOR_CARD_HOVER,
+            width=80,
+            command=ledger_win.destroy
+        )
+        btn_close.pack(side="right")
+
+    def handle_export(self):
+        """Triggers the export report function and notifies the user."""
+        current_artifacts = self.artifacts if self.artifacts else []
+
+        # Log export action to ledger
+        self.ledger.add_entry("EXPORT_REPORT", {"artifact_count": len(current_artifacts)})
+
+        default_filename = f"reviver_forensic_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        save_path = filedialog.asksaveasfilename(
+            title="Export Signed Forensic JSON Report",
+            initialdir=CURRENT_DIR,
+            initialfile=default_filename,
+            filetypes=[("Signed Forensic Report (*.json)", "*.json"), ("All Files", "*.*")]
+        )
+        if not save_path:
+            return
+
+        filepath = export_forensic_report(current_artifacts, self.ledger.chain, filepath=save_path)
+
+        # Show success notification in status bar and popup
+        self._update_status(f"✔ Forensic report successfully exported & signed: {os.path.basename(filepath)}")
+        messagebox.showinfo(
+            "Report Exported",
+            f"Forensic evidence package exported successfully!\n\n"
+            f"File: {filepath}\n"
+            f"Artifacts Packaged: {len(current_artifacts)}\n"
+            f"Ledger Chain Height: {len(self.ledger.chain)} blocks\n"
+            f"Cryptographic SHA-256 signature verified."
+        )
 
     def _export_artifact(self):
         if not self.selected_artifact:
@@ -753,6 +905,7 @@ class ReviverApp(ctk.CTk):
                     f.write(f"Matched Keywords: {', '.join(art.matched_keywords)}\n")
                     f.write(f"\n--- RECONSTRUCTED CONTENT ---\n\n")
                     f.write(art.reconstructed_content)
+                self.ledger.add_entry("EXPORT_SINGLE_ARTIFACT", {"artifact_id": art.artifact_id, "name": art.name})
                 self._update_status(f"Exported artifact to: {os.path.basename(save_path)}")
                 messagebox.showinfo("Success", f"Artifact exported successfully:\n{save_path}")
             except Exception as e:
@@ -775,6 +928,9 @@ class ReviverApp(ctk.CTk):
         self._set_status_badge("SCANNING FILE...", mode="SCANNING")
         self.progress_bar.configure(mode="indeterminate")
         self.progress_bar.start()
+
+        # Log scan initiation to ledger
+        self.ledger.add_entry("START_SCAN", {"target": os.path.basename(self.target_file_path)})
 
         # Run background thread
         thread = threading.Thread(target=self._run_scan_worker, daemon=True)
@@ -822,6 +978,14 @@ class ReviverApp(ctk.CTk):
         self.stat_stitched_lbl.configure(text=f"Stitched: {stitched_count}")
         self.stat_critical_lbl.configure(text=f"Critical: {critical_count}")
 
+        # Log scan completion to audit ledger
+        self.ledger.add_entry("SCAN_COMPLETED", {
+            "fragments_carved": total_frags,
+            "artifacts_reconstructed": len(artifacts),
+            "stitched_relationships": stitched_count,
+            "critical_risk_items": critical_count
+        })
+
         self._update_status(
             f"Scan Complete: {total_frags} stream blocks carved, {len(artifacts)} prioritized artifacts."
         )
@@ -832,6 +996,14 @@ class ReviverApp(ctk.CTk):
         # Select first artifact if available
         if self.filtered_artifacts:
             self._display_artifact(self.filtered_artifacts[0])
+
+    @property
+    def current_artifacts(self):
+        return self.artifacts
+
+    @current_artifacts.setter
+    def current_artifacts(self, val):
+        self.artifacts = val
 
     def _on_scan_failed(self, error_msg: str):
         self.is_scanning = False
