@@ -190,12 +190,19 @@ def classify_text_content(text: str) -> Tuple[str, str, str]:
     """Real regex and keyword heuristic classifier."""
     text_lower = text.lower()
 
-    # Check for Credentials / Secrets
+    # Check for System / Security Logs (e.g., syslog events, auth failures, kernel)
     if any(k in text_lower for k in [
-        "password", "passwd", "token", "secret", "ssh", "private_key",
+        "sshd[", "auditd[", "kernel:", "sudo:", "failed password",
+        "accepted publickey", "anom_promiscuous", "out-of-memory", "daemon"
+    ]):
+        return "System Logs", "Tier 3 - Operational", "🟢 Standard Review"
+
+    # Check for Credentials / Secrets
+    elif any(k in text_lower for k in [
+        "db_password", "passwd", "token", "secret", "private_key",
         "api_key", "bearer ", "aws_access", "aws_secret", "jwt_secret",
-        "redis_auth", "sk_live_"
-    ]) or re.search(r"AKIA[0-9A-Z]{16}", text):
+        "redis_auth", "sk_live_", "sk_test_"
+    ]) or ("password=" in text_lower or "password:" in text_lower or "password =" in text_lower) or re.search(r"AKIA[0-9A-Z]{16}", text):
         return "Credentials", "Tier 1 - Critical Risk", "🔴 High Priority"
 
     # Check for Financial Data / Credit Cards / Crypto
@@ -220,16 +227,12 @@ def classify_text_content(text: str) -> Tuple[str, str, str]:
     ):
         return "PII", "Tier 2 - Sensitive", "🟡 Medium Priority"
 
-    # Check for System / Security Logs
-    elif any(k in text_lower for k in [
-        "failed", "alert", "error", "kernel", "audit", "sudo",
-        "sshd", "daemon", "promiscuous", "out-of-memory"
-    ]):
-        return "System Logs", "Tier 3 - Operational", "🟢 Standard Review"
-
     # Check for Internal Incident Response Memos
     elif any(k in text_lower for k in ["incident memo", "confidential", "dfir", "general counsel", "breach"]):
         return "Internal Comms", "Tier 3 - Operational", "🔵 Legal Review"
+
+    elif any(k in text_lower for k in ["failed", "alert", "error"]):
+        return "System Logs", "Tier 3 - Operational", "🟢 Standard Review"
 
     else:
         return "General Stream", "Tier 3 - Low", "⚪ Background"
