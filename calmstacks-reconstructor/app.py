@@ -511,7 +511,7 @@ class ReviverApp(ctk.CTk):
         self.progress_bar.pack(fill="x", pady=(0, 14))
         self.progress_bar.set(0)
 
-        # Category Filter Tabs
+        # Category Filter Tabs (Vertical Stack Layout)
         lbl_filt = ctk.CTkLabel(
             control_frame,
             text="TRIAGE CATEGORY FILTER",
@@ -519,21 +519,48 @@ class ReviverApp(ctk.CTk):
             text_color=COLOR_TEXT_MUTED,
             anchor="w"
         )
-        lbl_filt.pack(fill="x", pady=(0, 4))
+        lbl_filt.pack(fill="x", pady=(0, 6))
 
-        self.filter_segmented = ctk.CTkSegmentedButton(
-            control_frame,
-            values=["ALL", "CRITICAL", "CREDENTIALS", "PII", "MEDIA", "LOGS"],
-            command=self._on_filter_changed,
-            font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
-            selected_color=COLOR_ACCENT,
-            selected_hover_color=COLOR_ACCENT_HOVER,
-            unselected_color="#f1f5f9",
-            unselected_hover_color=COLOR_CARD_HOVER,
-            text_color=COLOR_TEXT_PRIMARY
-        )
-        self.filter_segmented.set("ALL")
-        self.filter_segmented.pack(fill="x", pady=(0, 14))
+        filter_box = ctk.CTkFrame(control_frame, fg_color="transparent")
+        filter_box.pack(fill="x", pady=(0, 14))
+
+        self.filter_buttons = {}
+        filter_options = [
+            ("ALL", "🌐 ALL EVIDENCE"),
+            ("CRITICAL", "🔴 CRITICAL RISK"),
+            ("CREDENTIALS", "🔑 CREDENTIALS"),
+            ("PII", "👤 PII RECORDS"),
+            ("MEDIA", "🖼️ RECOVERED MEDIA"),
+            ("LOGS", "📜 SYSTEM LOGS")
+        ]
+
+        for key, label in filter_options:
+            btn = ctk.CTkButton(
+                filter_box,
+                text=label,
+                font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+                height=30,
+                anchor="w",
+                fg_color=COLOR_ACCENT if key == "ALL" else "#f1f5f9",
+                hover_color=COLOR_ACCENT_HOVER if key == "ALL" else COLOR_CARD_HOVER,
+                text_color="#ffffff" if key == "ALL" else COLOR_TEXT_PRIMARY,
+                border_width=0 if key == "ALL" else 1,
+                border_color=COLOR_BORDER,
+                command=lambda k=key: self._on_filter_changed(k)
+            )
+            btn.pack(fill="x", pady=2)
+            self.filter_buttons[key] = btn
+
+        # Proxy object for backwards compatibility with any segmented button calls
+        class FilterProxy:
+            def __init__(proxy_self, parent):
+                proxy_self.parent = parent
+            def set(proxy_self, val):
+                proxy_self.parent._on_filter_changed(val)
+            def get(proxy_self):
+                return proxy_self.parent.current_filter
+
+        self.filter_segmented = FilterProxy(self)
 
 
 
@@ -1549,6 +1576,23 @@ class ReviverApp(ctk.CTk):
 
     def _on_filter_changed(self, value: str):
         self.current_filter = value
+        if hasattr(self, "filter_buttons"):
+            for k, btn in self.filter_buttons.items():
+                if k == value:
+                    btn.configure(
+                        fg_color=COLOR_ACCENT,
+                        hover_color=COLOR_ACCENT_HOVER,
+                        text_color="#ffffff",
+                        border_width=0
+                    )
+                else:
+                    btn.configure(
+                        fg_color="#f1f5f9",
+                        hover_color=COLOR_CARD_HOVER,
+                        text_color=COLOR_TEXT_PRIMARY,
+                        border_width=1,
+                        border_color=COLOR_BORDER
+                    )
         self._apply_filters()
 
     def _on_search_query_changed(self, event=None):

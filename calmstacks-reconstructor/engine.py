@@ -400,10 +400,10 @@ def query_llm_api(prompt: str, context: str = "", api_key: str = "") -> str:
                     raw_text = res.json()["choices"][0]["message"]["content"]
                     # Strip any internal reasoning <think> tokens
                     return re.sub(r'<think>.*?</think>', '', raw_text, flags=re.DOTALL).strip()
-                elif res.status_code in (400, 404):
-                    continue  # Try next model candidate
+                elif res.status_code in (400, 404, 429):
+                    continue  # Try next model candidate or fallback gracefully
                 else:
-                    return f"[Groq API Error {res.status_code}]: {res.text}"
+                    continue
             except Exception:
                 continue
 
