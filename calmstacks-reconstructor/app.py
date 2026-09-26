@@ -36,77 +36,85 @@ from engine import (
     export_forensic_report,
     generate_plain_english_report,
     organize_folder_by_type,
-    scan_and_purge_duplicates
+    scan_and_purge_duplicates,
+    precise_duplicate_scanner,
+    query_llm_api,
+    ai_enhance_missing_text,
+    refine_carved_image,
+    speak_text,
+    stop_speech,
+    is_speaking
 )
 
-# CustomTkinter Global Appearance
-ctk.set_appearance_mode("dark")
+# =========================================================================
+# FUTURISTIC LIGHT-CYBER COLOR PALETTE & STYLING
+# =========================================================================
+ctk.set_appearance_mode("Light") # Clean futuristic light-cyber theme
 ctk.set_default_color_theme("blue")
 
-# Enterprise Cybersecurity Color Palette (Deep Slate & Obsidian Void)
-COLOR_BG_DARK = "#090d16"         # Obsidian base background
-COLOR_PANEL_BG = "#0f172a"        # Deep slate container
-COLOR_CARD_BG = "#131d31"         # Slate card surface
-COLOR_CARD_HOVER = "#1c2b45"      # Subtle hover glow
-COLOR_CARD_ACTIVE = "#162544"     # High-contrast active card surface
-COLOR_BORDER = "#1e293b"          # Slate border
-COLOR_BORDER_FOCUS = "#38bdf8"    # Electric Cyan active border
-COLOR_ACCENT = "#2563eb"          # Enterprise Cobalt Blue
+COLOR_BG_LIGHT = "#f1f5f9"         # Ice white cyber background
+COLOR_PANEL_BG = "#ffffff"         # Pure white panel surface
+COLOR_CARD_BG = "#f8fafc"          # Light card surface
+COLOR_CARD_HOVER = "#e2e8f0"       # Subtle cyber hover glow
+COLOR_CARD_ACTIVE = "#e0e7ff"      # Light indigo active glow
+COLOR_BORDER = "#cbd5e1"           # Crisp slate border
+COLOR_BORDER_FOCUS = "#2563eb"    # Electric Cobalt active border
+COLOR_ACCENT = "#2563eb"           # Electric Cobalt Blue
 COLOR_ACCENT_HOVER = "#1d4ed8"
-COLOR_ACCENT_PURPLE = "#8b5cf6"   # Electric Violet for Disk Dig
-COLOR_ACCENT_PURPLE_HOVER = "#7c3aed"
-COLOR_TEXT_PRIMARY = "#f8fafc"    # Bright crisp text
-COLOR_TEXT_SECONDARY = "#94a3b8"  # Slate muted text
-COLOR_TEXT_MUTED = "#64748b"      # Extra muted meta text
+COLOR_ACCENT_PURPLE = "#7c3aed"   # Electric Violet for Disk Dig
+COLOR_ACCENT_PURPLE_HOVER = "#6d28d9"
+COLOR_TEXT_PRIMARY = "#0f172a"     # Deep high-contrast text
+COLOR_TEXT_SECONDARY = "#475569"   # Muted gray text
+COLOR_TEXT_MUTED = "#94a3b8"       # Slate muted meta text
 
-# Threat Level Palettes (Vibrant Cyber Glass Badges)
+# Threat Level Palettes (Light-Cyber Glass Badges)
 CATEGORY_PALETTE = {
     "CRITICAL": {
-        "text": "#f87171",
-        "bg": "#450a0a",
+        "text": "#b91c1c",
+        "bg": "#fee2e2",
         "border": "#ef4444",
         "badge": "🔴 CRITICAL RISK"
     },
     "CREDENTIALS": {
-        "text": "#fca5a5",
-        "bg": "#3f0c10",
+        "text": "#991b1b",
+        "bg": "#fef2f2",
         "border": "#f87171",
         "badge": "🔑 CREDENTIALS"
     },
     "FINANCIAL": {
-        "text": "#f87171",
-        "bg": "#450a0a",
-        "border": "#dc2626",
+        "text": "#c2410c",
+        "bg": "#ffedd5",
+        "border": "#f97316",
         "badge": "💳 FINANCIAL WIRE"
     },
     "PII": {
-        "text": "#fbbf24",
-        "bg": "#451a03",
+        "text": "#b45309",
+        "bg": "#fef3c7",
         "border": "#f59e0b",
         "badge": "🛡️ PII RECORD"
     },
     "MEDIA": {
-        "text": "#c084fc",
-        "bg": "#2e1065",
-        "border": "#8b5cf6",
+        "text": "#6b21a8",
+        "bg": "#f3e8ff",
+        "border": "#a855f7",
         "badge": "📦 MEDIA / RECOVERED"
     },
     "LOGS": {
-        "text": "#34d399",
-        "bg": "#064e3b",
+        "text": "#047857",
+        "bg": "#d1fae5",
         "border": "#10b981",
         "badge": "⚡ SYSTEM LOGS"
     },
     "INTERNAL": {
-        "text": "#60a5fa",
-        "bg": "#172554",
+        "text": "#1d4ed8",
+        "bg": "#dbeafe",
         "border": "#3b82f6",
         "badge": "📑 DFIR MEMO"
     },
     "DEFAULT": {
-        "text": "#94a3b8",
-        "bg": "#1e293b",
-        "border": "#334155",
+        "text": "#334155",
+        "bg": "#f1f5f9",
+        "border": "#cbd5e1",
         "badge": "⚪ CARVED STREAM"
     }
 }
@@ -138,10 +146,10 @@ class ReviverApp(ctk.CTk):
         super().__init__()
 
         # Window Setup
-        self.title("REVIVER - Digital Forensics & Data Carving Suite")
-        self.geometry("1400x880")
-        self.minsize(1100, 720)
-        self.configure(fg_color=COLOR_BG_DARK)
+        self.title("REVIVER - Light-Cyber Digital Evidence Command Center")
+        self.geometry("1440x900")
+        self.minsize(1120, 720)
+        self.configure(fg_color=COLOR_BG_LIGHT)
 
         # Cryptographic Hash Chain Ledger (Chain of Custody)
         self.ledger = ForensicLedger()
@@ -149,9 +157,15 @@ class ReviverApp(ctk.CTk):
         # Thread-safe event queue
         self.event_queue = queue.Queue()
 
-        # Default sample file path
-        default_sample = os.path.join(CURRENT_DIR, "sample_dump.bin")
-        self.target_file_path: str = default_sample if os.path.exists(default_sample) else ""
+        # Default sample file path (prefers test_disk.img sandbox if present)
+        test_disk_path = os.path.join(CURRENT_DIR, "test_disk.img")
+        sample_dump_path = os.path.join(CURRENT_DIR, "sample_dump.bin")
+        if os.path.exists(test_disk_path):
+            self.target_file_path: str = test_disk_path
+        elif os.path.exists(sample_dump_path):
+            self.target_file_path: str = sample_dump_path
+        else:
+            self.target_file_path: str = ""
 
         # State Variables
         self.artifacts: List[ForensicArtifact] = []
@@ -161,6 +175,10 @@ class ReviverApp(ctk.CTk):
         self.current_filter: str = "ALL"
         self.search_query: str = ""
         self.artifact_widgets: List[ctk.CTkFrame] = []
+
+        # Text-To-Speech (TTS) Voice State Variables
+        self.last_ai_response: str = ""
+        self.auto_read_enabled: bool = False
 
         # Build UI Components
         self._build_top_bar()
@@ -198,42 +216,78 @@ class ReviverApp(ctk.CTk):
         self.after(50, self._process_event_queue)
 
     # =========================================================================
-    # TOP BAR
+    # TOP BAR (LIGHT-CYBER COMMAND HUD)
     # =========================================================================
     def _build_top_bar(self):
-        self.top_bar = ctk.CTkFrame(self, fg_color=COLOR_PANEL_BG, corner_radius=0, height=64)
+        self.top_bar = ctk.CTkFrame(
+            self,
+            fg_color=COLOR_PANEL_BG,
+            corner_radius=0,
+            height=72,
+            border_width=1,
+            border_color=COLOR_BORDER
+        )
         self.top_bar.pack(side="top", fill="x", padx=0, pady=0)
         self.top_bar.pack_propagate(False)
 
-        # Left: Branding with cyber icon
+        # Left: High-impact Cyber Command Branding with prominent Logo Emblem
         brand_frame = ctk.CTkFrame(self.top_bar, fg_color="transparent")
-        brand_frame.pack(side="left", padx=16, pady=8)
+        brand_frame.pack(side="left", padx=16, pady=6)
 
-        icon_label = ctk.CTkLabel(
+        # High-tech Logo Emblem Box
+        logo_emblem = ctk.CTkFrame(
             brand_frame,
-            text="🛡️",
-            font=ctk.CTkFont(size=22, weight="bold")
+            width=46,
+            height=46,
+            corner_radius=12,
+            fg_color="#2563eb",
+            border_width=2,
+            border_color="#93c5fd"
         )
-        icon_label.pack(side="left", padx=(0, 10))
+        logo_emblem.pack(side="left", padx=(0, 12))
+        logo_emblem.pack_propagate(False)
+
+        logo_icon = ctk.CTkLabel(
+            logo_emblem,
+            text="🛡️",
+            font=ctk.CTkFont(size=24)
+        )
+        logo_icon.place(relx=0.5, rely=0.5, anchor="center")
 
         title_box = ctk.CTkFrame(brand_frame, fg_color="transparent")
         title_box.pack(side="left")
 
+        # Headline Row: Big Logo-Style Typography + Cyber Tag
+        headline_row = ctk.CTkFrame(title_box, fg_color="transparent")
+        headline_row.pack(anchor="w")
+
         main_title = ctk.CTkLabel(
-            title_box,
+            headline_row,
             text="REVIVER",
-            font=ctk.CTkFont(family="Segoe UI", size=18, weight="bold"),
-            text_color=COLOR_TEXT_PRIMARY
+            font=ctk.CTkFont(family="Bahnschrift", size=26, weight="bold"),
+            text_color="#0f172a"
         )
-        main_title.pack(anchor="w")
+        main_title.pack(side="left", padx=(0, 8))
+
+        ver_badge = ctk.CTkLabel(
+            headline_row,
+            text="v2.5 // CORE",
+            font=ctk.CTkFont(family="Consolas", size=9, weight="bold"),
+            fg_color="#dbeafe",
+            text_color="#1d4ed8",
+            corner_radius=4,
+            padx=6,
+            pady=2
+        )
+        ver_badge.pack(side="left")
 
         sub_title = ctk.CTkLabel(
             title_box,
-            text="AI DIGITAL EVIDENCE & RECOVERY SUITE // DFIR ENTERPRISE v2.4",
+            text="LIGHT-CYBER DIGITAL EVIDENCE COMMAND CENTER // DFIR SUITE",
             font=ctk.CTkFont(family="Consolas", size=9, weight="bold"),
-            text_color=COLOR_TEXT_MUTED
+            text_color="#64748b"
         )
-        sub_title.pack(anchor="w")
+        sub_title.pack(anchor="w", pady=(1, 0))
 
         # Right: Telemetry HUD & Status Badge
         telemetry_frame = ctk.CTkFrame(self.top_bar, fg_color="transparent")
@@ -244,11 +298,11 @@ class ReviverApp(ctk.CTk):
             telemetry_frame,
             text="Fragments: 0",
             font=ctk.CTkFont(family="Consolas", size=11, weight="bold"),
-            fg_color="#131d31",
+            fg_color="#f1f5f9",
             corner_radius=6,
             padx=10,
             pady=5,
-            text_color="#94a3b8"
+            text_color=COLOR_TEXT_SECONDARY
         )
         self.stat_fragments_lbl.pack(side="left", padx=4)
 
@@ -256,11 +310,11 @@ class ReviverApp(ctk.CTk):
             telemetry_frame,
             text="Stitched: 0",
             font=ctk.CTkFont(family="Consolas", size=11, weight="bold"),
-            fg_color="#131d31",
+            fg_color="#e0f2fe",
             corner_radius=6,
             padx=10,
             pady=5,
-            text_color="#38bdf8"
+            text_color="#0284c7"
         )
         self.stat_stitched_lbl.pack(side="left", padx=4)
 
@@ -268,11 +322,11 @@ class ReviverApp(ctk.CTk):
             telemetry_frame,
             text="Critical: 0",
             font=ctk.CTkFont(family="Consolas", size=11, weight="bold"),
-            fg_color="#450a0a",
+            fg_color="#fee2e2",
             corner_radius=6,
             padx=10,
             pady=5,
-            text_color="#f87171"
+            text_color="#dc2626"
         )
         self.stat_critical_lbl.pack(side="left", padx=4)
 
@@ -281,7 +335,7 @@ class ReviverApp(ctk.CTk):
             telemetry_frame,
             text="● SYSTEM READY",
             font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-            fg_color="#062e1d",
+            fg_color="#dcfce7",
             text_color="#10b981",
             corner_radius=6,
             padx=12,
@@ -294,8 +348,9 @@ class ReviverApp(ctk.CTk):
             telemetry_frame,
             text="🔐 Audit Ledger",
             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-            fg_color="#1e293b",
+            fg_color="#f1f5f9",
             hover_color=COLOR_CARD_HOVER,
+            text_color=COLOR_TEXT_PRIMARY,
             border_width=1,
             border_color=COLOR_BORDER,
             width=115,
@@ -308,74 +363,85 @@ class ReviverApp(ctk.CTk):
             telemetry_frame,
             text="💾 Export Report",
             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-            fg_color="#1d4ed8",
-            hover_color=COLOR_ACCENT,
-            border_width=1,
-            border_color="#3b82f6",
+            fg_color=COLOR_ACCENT,
+            hover_color=COLOR_ACCENT_HOVER,
+            text_color="#ffffff",
             width=115,
             height=32,
             command=self.handle_export
         )
-        self.btn_export_top.pack(side="left", padx=2)
-
-        self.btn_ai_chat = ctk.CTkButton(
-            telemetry_frame,
-            text="💬 Reviver AI",
-            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-            fg_color="#1e293b",
-            hover_color=COLOR_CARD_HOVER,
-            border_width=1,
-            border_color=COLOR_BORDER,
-            width=110,
-            height=32,
-            command=self.open_reviver_chatbot
-        )
-        self.btn_ai_chat.pack(side="left", padx=(2, 0))
+        self.btn_export_top.pack(side="left", padx=(2, 0))
 
     # =========================================================================
-    # MAIN SPLIT LAYOUT (LEFT & RIGHT PANELS)
+    # 3-COLUMN MAIN LAYOUT SETUP (RESIZABLE PANES)
     # =========================================================================
     def _build_main_split_layout(self):
         self.main_container = ctk.CTkFrame(self, fg_color="transparent")
-        self.main_container.pack(side="top", fill="both", expand=True, padx=12, pady=10)
+        self.main_container.pack(side="top", fill="both", expand=True, padx=10, pady=8)
 
-        # Configure 2-column grid
-        self.main_container.grid_columnconfigure(0, weight=4, minsize=420)
-        self.main_container.grid_columnconfigure(1, weight=6, minsize=640)
-        self.main_container.grid_rowconfigure(0, weight=1)
-
-        # Left Panel (Controls & Recovered Artifacts)
-        self._build_left_panel()
-
-        # Right Panel (File Preview & Integrity Report)
-        self._build_right_panel()
-
-    # =========================================================================
-    # LEFT PANEL (CONTROLS & ARTIFACT QUEUE)
-    # =========================================================================
-    def _build_left_panel(self):
-        self.left_panel = ctk.CTkFrame(
+        # Resizable Horizontal PanedWindow allowing dynamic dragging of column widths
+        self.paned_window = tk.PanedWindow(
             self.main_container,
+            orient=tk.HORIZONTAL,
+            sashwidth=6,
+            sashrelief=tk.FLAT,
+            bg=COLOR_BORDER,
+            bd=0,
+            sashcursor="size_we",
+            opaqueresize=True
+        )
+        self.paned_window.pack(fill="both", expand=True)
+
+        # Build the 3 distinct resizable columns
+        self._build_left_controls_column()
+        self._build_center_queue_column()
+        self._build_right_ai_column()
+
+    # =========================================================================
+    # COLUMN 0: FORENSIC CONTROLS & ACTION TRIGGERS
+    # =========================================================================
+    def _build_left_controls_column(self):
+        self.left_panel = ctk.CTkFrame(
+            self.paned_window,
             fg_color=COLOR_PANEL_BG,
-            corner_radius=8,
+            corner_radius=10,
             border_width=1,
             border_color=COLOR_BORDER
         )
-        self.left_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 6), pady=0)
+        self.paned_window.add(self.left_panel, minsize=260, width=320, stretch="never", padx=3)
 
-        # Top Control Box
+        # Container
         control_frame = ctk.CTkFrame(self.left_panel, fg_color="transparent")
-        control_frame.pack(fill="x", padx=14, pady=12)
+        control_frame.pack(fill="both", expand=True, padx=14, pady=12)
+
+        # Section Header
+        lbl_sec = ctk.CTkLabel(
+            control_frame,
+            text="⚡ FORENSIC CONTROLS",
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
+            text_color=COLOR_TEXT_PRIMARY,
+            anchor="w"
+        )
+        lbl_sec.pack(fill="x", pady=(0, 2))
+
+        lbl_sec_sub = ctk.CTkLabel(
+            control_frame,
+            text="EVIDENCE EXTRACTION & TRIAGE",
+            font=ctk.CTkFont(family="Consolas", size=9, weight="bold"),
+            text_color=COLOR_TEXT_MUTED,
+            anchor="w"
+        )
+        lbl_sec_sub.pack(fill="x", pady=(0, 10))
 
         # Target Disk Image Selector Area
         file_select_row = ctk.CTkFrame(control_frame, fg_color="transparent")
-        file_select_row.pack(fill="x", pady=(0, 8))
+        file_select_row.pack(fill="x", pady=(0, 6))
 
         self.btn_select_file = ctk.CTkButton(
             file_select_row,
-            text="📂 Select Disk/Image File",
-            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-            fg_color="#131d31",
+            text="📂 Select Disk / Dump",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            fg_color="#f1f5f9",
             hover_color=COLOR_CARD_HOVER,
             text_color=COLOR_TEXT_PRIMARY,
             border_width=1,
@@ -389,8 +455,9 @@ class ReviverApp(ctk.CTk):
             file_select_row,
             text="↺ Sample",
             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-            fg_color="#131d31",
+            fg_color="#f1f5f9",
             hover_color=COLOR_CARD_HOVER,
+            text_color=COLOR_TEXT_PRIMARY,
             border_width=1,
             border_color=COLOR_BORDER,
             width=70,
@@ -403,71 +470,159 @@ class ReviverApp(ctk.CTk):
         self.lbl_current_file = ctk.CTkLabel(
             control_frame,
             text=f"Target: {os.path.basename(self.target_file_path) if self.target_file_path else 'No file selected'}",
-            font=ctk.CTkFont(family="Consolas", size=11),
+            font=ctk.CTkFont(family="Consolas", size=10),
             text_color=COLOR_TEXT_SECONDARY,
             anchor="w"
         )
         self.lbl_current_file.pack(fill="x", pady=(0, 10))
 
-        # Action Buttons Row: Disk Dig (Raw Sector Carve) + AI Deep Scan
-        actions_frame = ctk.CTkFrame(control_frame, fg_color="transparent")
-        actions_frame.pack(fill="x", pady=(0, 8))
-
+        # Action Buttons: Disk Dig (Raw Sector Carve) + AI Deep Scan
         self.btn_disk_dig = ctk.CTkButton(
-            actions_frame,
+            control_frame,
             text="⛏️ Disk Dig (Sector Carve)",
             font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
             fg_color=COLOR_ACCENT_PURPLE,
             hover_color=COLOR_ACCENT_PURPLE_HOVER,
-            height=42,
+            text_color="#ffffff",
+            height=40,
             command=self._start_disk_dig_thread
         )
-        self.btn_disk_dig.pack(side="left", fill="x", expand=True, padx=(0, 4))
+        self.btn_disk_dig.pack(fill="x", pady=(0, 6))
 
         self.btn_run_scan = ctk.CTkButton(
-            actions_frame,
+            control_frame,
             text="⚡ AI Deep Scan",
             font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
             fg_color=COLOR_ACCENT,
             hover_color=COLOR_ACCENT_HOVER,
-            height=42,
+            text_color="#ffffff",
+            height=40,
             command=self._start_scan_thread
         )
-        self.btn_run_scan.pack(side="right", fill="x", expand=True, padx=(4, 0))
+        self.btn_run_scan.pack(fill="x", pady=(0, 10))
 
-        # Progress Bar (pulsing/indeterminate during scan)
+        # Progress Bar (pulsing during scan)
         self.progress_bar = ctk.CTkProgressBar(
             control_frame,
-            height=6,
-            progress_color="#38bdf8",
-            fg_color="#131d31"
+            height=8,
+            progress_color=COLOR_ACCENT,
+            fg_color="#e2e8f0"
         )
-        self.progress_bar.pack(fill="x", pady=(0, 10))
+        self.progress_bar.pack(fill="x", pady=(0, 14))
         self.progress_bar.set(0)
 
-        # Category Filter Tabs (Segmented Button with MEDIA support)
+        # Category Filter Tabs
+        lbl_filt = ctk.CTkLabel(
+            control_frame,
+            text="TRIAGE CATEGORY FILTER",
+            font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+            text_color=COLOR_TEXT_MUTED,
+            anchor="w"
+        )
+        lbl_filt.pack(fill="x", pady=(0, 4))
+
         self.filter_segmented = ctk.CTkSegmentedButton(
             control_frame,
             values=["ALL", "CRITICAL", "CREDENTIALS", "PII", "MEDIA", "LOGS"],
             command=self._on_filter_changed,
-            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
             selected_color=COLOR_ACCENT,
             selected_hover_color=COLOR_ACCENT_HOVER,
-            unselected_color="#131d31",
-            unselected_hover_color=COLOR_CARD_HOVER
+            unselected_color="#f1f5f9",
+            unselected_hover_color=COLOR_CARD_HOVER,
+            text_color=COLOR_TEXT_PRIMARY
         )
         self.filter_segmented.set("ALL")
-        self.filter_segmented.pack(fill="x", pady=(0, 8))
+        self.filter_segmented.pack(fill="x", pady=(0, 14))
 
-        # Search Bar
-        search_frame = ctk.CTkFrame(control_frame, fg_color="transparent")
-        search_frame.pack(fill="x", pady=(0, 4))
+
+
+        # System Telemetry Mini-Card
+        telemetry_box = ctk.CTkFrame(
+            control_frame,
+            fg_color=COLOR_CARD_BG,
+            corner_radius=8,
+            border_width=1,
+            border_color=COLOR_BORDER
+        )
+        telemetry_box.pack(fill="x", side="bottom", pady=(8, 0))
+
+        t_inner = ctk.CTkFrame(telemetry_box, fg_color="transparent")
+        t_inner.pack(fill="x", padx=10, pady=8)
+
+        ctk.CTkLabel(
+            t_inner,
+            text="REVIVER INTELLIGENCE // v2.5",
+            font=ctk.CTkFont(family="Consolas", size=9, weight="bold"),
+            text_color=COLOR_ACCENT,
+            anchor="w"
+        ).pack(anchor="w")
+
+        ctk.CTkLabel(
+            t_inner,
+            text="Raw Sector Carving & Shannon Entropy\nCryptographic Chain of Custody Active",
+            font=ctk.CTkFont(family="Segoe UI", size=9),
+            text_color=COLOR_TEXT_SECONDARY,
+            anchor="w",
+            justify="left"
+        ).pack(anchor="w", pady=(2, 0))
+
+    # =========================================================================
+    # COLUMN 1: ARTIFACT QUEUE & FILTERING TOOLS
+    # =========================================================================
+    def _build_center_queue_column(self):
+        self.center_panel = ctk.CTkFrame(
+            self.paned_window,
+            fg_color=COLOR_PANEL_BG,
+            corner_radius=10,
+            border_width=1,
+            border_color=COLOR_BORDER
+        )
+        self.paned_window.add(self.center_panel, minsize=300, width=420, stretch="always", padx=3)
+
+        # Background Watermark (Shield + Plus Symbol)
+        watermark = ctk.CTkLabel(
+            self.center_panel,
+            text="🛡️+",
+            font=ctk.CTkFont(family="Segoe UI", size=140, weight="bold"),
+            text_color="#f1f5f9"
+        )
+        watermark.place(relx=0.5, rely=0.52, anchor="center")
+        watermark.lower()
+
+        # Artifacts Queue Header
+        queue_header_frame = ctk.CTkFrame(self.center_panel, fg_color="transparent")
+        queue_header_frame.pack(fill="x", padx=14, pady=(12, 6))
+
+        queue_title = ctk.CTkLabel(
+            queue_header_frame,
+            text="📦 ARTIFACT QUEUE",
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
+            text_color=COLOR_TEXT_PRIMARY
+        )
+        queue_title.pack(side="left")
+
+        self.queue_count_lbl = ctk.CTkLabel(
+            queue_header_frame,
+            text="0 items",
+            font=ctk.CTkFont(family="Consolas", size=10, weight="bold"),
+            fg_color="#e2e8f0",
+            text_color=COLOR_TEXT_PRIMARY,
+            corner_radius=6,
+            padx=8,
+            pady=3
+        )
+        self.queue_count_lbl.pack(side="right")
+
+        # Instant Search Bar
+        search_frame = ctk.CTkFrame(self.center_panel, fg_color="transparent")
+        search_frame.pack(fill="x", padx=14, pady=(0, 8))
 
         self.search_entry = ctk.CTkEntry(
             search_frame,
-            placeholder_text="🔍 Search fragments, keywords, tokens, hex offsets...",
-            font=ctk.CTkFont(family="Segoe UI", size=12),
-            fg_color="#060911",
+            placeholder_text="🔍 Search fragments, keywords, tokens, hex...",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            fg_color=COLOR_CARD_BG,
             border_color=COLOR_BORDER,
             text_color=COLOR_TEXT_PRIMARY,
             height=34
@@ -480,8 +635,9 @@ class ReviverApp(ctk.CTk):
             text="✕",
             width=34,
             height=34,
-            fg_color="#131d31",
+            fg_color="#f1f5f9",
             hover_color=COLOR_CARD_HOVER,
+            text_color=COLOR_TEXT_PRIMARY,
             border_width=1,
             border_color=COLOR_BORDER,
             command=self._clear_search
@@ -489,32 +645,12 @@ class ReviverApp(ctk.CTk):
         btn_clear_search.pack(side="right")
 
         # Separator Line
-        sep = ctk.CTkFrame(self.left_panel, fg_color=COLOR_BORDER, height=1)
-        sep.pack(fill="x", padx=14, pady=4)
-
-        # Artifacts Queue Header
-        queue_header_frame = ctk.CTkFrame(self.left_panel, fg_color="transparent")
-        queue_header_frame.pack(fill="x", padx=14, pady=(6, 4))
-
-        queue_title = ctk.CTkLabel(
-            queue_header_frame,
-            text="RECOVERED ARTIFACTS",
-            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-            text_color=COLOR_TEXT_PRIMARY
-        )
-        queue_title.pack(side="left")
-
-        self.queue_count_lbl = ctk.CTkLabel(
-            queue_header_frame,
-            text="0 items",
-            font=ctk.CTkFont(family="Consolas", size=11),
-            text_color=COLOR_TEXT_SECONDARY
-        )
-        self.queue_count_lbl.pack(side="right")
+        sep = ctk.CTkFrame(self.center_panel, fg_color=COLOR_BORDER, height=1)
+        sep.pack(fill="x", padx=14, pady=(0, 6))
 
         # Scrollable Artifacts List
         self.artifacts_scroll = ctk.CTkScrollableFrame(
-            self.left_panel,
+            self.center_panel,
             fg_color="transparent",
             corner_radius=0
         )
@@ -523,30 +659,261 @@ class ReviverApp(ctk.CTk):
         # Initial Empty State Placeholder
         self.empty_state_label = ctk.CTkLabel(
             self.artifacts_scroll,
-            text="\n\nNo artifacts carved yet.\nClick 'Run AI Scan & Deep Carve' to extract\nand stitch forensic data.",
-            font=ctk.CTkFont(family="Segoe UI", size=13),
+            text="\n\nNo artifacts carved yet.\nRun 'Disk Dig' or 'AI Deep Scan' to extract\nand stitch forensic evidence.",
+            font=ctk.CTkFont(family="Segoe UI", size=12),
             text_color=COLOR_TEXT_SECONDARY,
             justify="center"
         )
         self.empty_state_label.pack(pady=40)
 
     # =========================================================================
-    # RIGHT PANEL (INSPECTOR, PREVIEW & RELATIONSHIP MAP)
+    # COLUMN 2: PERMANENT RIGHT-SIDE AI CHATBOT & FORENSIC INSPECTOR
     # =========================================================================
-    def _build_right_panel(self):
+    def _build_right_ai_column(self):
+        """Builds the permanent right-side panel containing AI Chat and Forensic Inspector."""
         self.right_panel = ctk.CTkFrame(
-            self.main_container,
+            self.paned_window,
             fg_color=COLOR_PANEL_BG,
-            corner_radius=8,
+            corner_radius=10,
             border_width=1,
             border_color=COLOR_BORDER
         )
-        self.right_panel.grid(row=0, column=1, sticky="nsew", padx=(6, 0), pady=0)
+        self.paned_window.add(self.right_panel, minsize=360, stretch="always", padx=3)
 
+        # Header with toggle between Inspector and AI Copilot
+        tab_row = ctk.CTkFrame(self.right_panel, fg_color="transparent", height=42)
+        tab_row.pack(fill="x", padx=12, pady=10)
+
+        self.btn_tab_ai = ctk.CTkButton(
+            tab_row,
+            text="💬 Reviver AI Copilot",
+            width=170,
+            height=34,
+            fg_color=COLOR_ACCENT,
+            hover_color=COLOR_ACCENT_HOVER,
+            text_color="#ffffff",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            command=lambda: self._switch_right_panel_tab("ai")
+        )
+        self.btn_tab_ai.pack(side="left", padx=(0, 6))
+
+        self.btn_tab_inspector = ctk.CTkButton(
+            tab_row,
+            text="🔍 Forensic Inspector",
+            width=160,
+            height=34,
+            fg_color="#f1f5f9",
+            hover_color=COLOR_CARD_HOVER,
+            text_color=COLOR_TEXT_PRIMARY,
+            border_width=1,
+            border_color=COLOR_BORDER,
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            command=lambda: self._switch_right_panel_tab("inspector")
+        )
+        self.btn_tab_inspector.pack(side="left")
+
+        btn_popout = ctk.CTkButton(
+            tab_row,
+            text="🗖 Pop Out",
+            font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+            fg_color="#f1f5f9",
+            hover_color=COLOR_CARD_HOVER,
+            text_color=COLOR_TEXT_PRIMARY,
+            border_width=1,
+            border_color=COLOR_BORDER,
+            width=70,
+            height=34,
+            command=self.open_reviver_chatbot
+        )
+        btn_popout.pack(side="right")
+
+        # Container for AI Chat view (default visible)
+        self.ai_chat_view_frame = ctk.CTkFrame(self.right_panel, fg_color="transparent")
+        self.ai_chat_view_frame.pack(fill="both", expand=True)
+
+        # Container for Inspector view (initially hidden)
+        self.inspector_view_frame = ctk.CTkFrame(self.right_panel, fg_color="transparent")
+
+        # Build views
+        self._build_ai_chat_contents(self.ai_chat_view_frame)
+        self._build_inspector_contents(self.inspector_view_frame)
+
+    def _switch_right_panel_tab(self, tab_name: str):
+        """Switches the right panel view between Forensic Inspector and Reviver AI Copilot."""
+        if tab_name == "inspector":
+            self.ai_chat_view_frame.pack_forget()
+            self.inspector_view_frame.pack(fill="both", expand=True)
+            self.btn_tab_inspector.configure(
+                fg_color=COLOR_ACCENT, hover_color=COLOR_ACCENT_HOVER, text_color="#ffffff", border_width=0
+            )
+            self.btn_tab_ai.configure(
+                fg_color="#f1f5f9", hover_color=COLOR_CARD_HOVER, text_color=COLOR_TEXT_PRIMARY, border_width=1
+            )
+        else:
+            self.inspector_view_frame.pack_forget()
+            self.ai_chat_view_frame.pack(fill="both", expand=True)
+            self.btn_tab_ai.configure(
+                fg_color=COLOR_ACCENT, hover_color=COLOR_ACCENT_HOVER, text_color="#ffffff", border_width=0
+            )
+            self.btn_tab_inspector.configure(
+                fg_color="#f1f5f9", hover_color=COLOR_CARD_HOVER, text_color=COLOR_TEXT_PRIMARY, border_width=1
+            )
+            if hasattr(self, "ai_input_entry"):
+                self.ai_input_entry.focus()
+
+    # =========================================================================
+    # TEXT-TO-SPEECH (TTS) AI VOICE CONTROLLER
+    # =========================================================================
+    def _toggle_read_aloud(self):
+        """Toggles Text-to-Speech reading of the latest AI response or forensic context."""
+        if is_speaking():
+            stop_speech()
+            self._on_tts_finished()
+            return
+
+        text_to_speak = self.last_ai_response
+        if not text_to_speak:
+            entry_text = self.ai_input_entry.get().strip() if hasattr(self, "ai_input_entry") else ""
+            if entry_text:
+                text_to_speak = entry_text
+            elif getattr(self, "selected_artifact", None):
+                art = self.selected_artifact
+                text_to_speak = (
+                    f"Selected artifact {art.artifact_id}. {art.name}. "
+                    f"Category {art.category}, priority tier {art.priority_tier}. "
+                    f"Health score {getattr(art, 'integrity_score', 80.0):.1f} percent."
+                )
+            else:
+                text_to_speak = (
+                    "Reviver AI digital forensics copilot is active. "
+                    "Type a query or run a scan to carve digital evidence."
+                )
+
+        self._start_tts_speech(text_to_speak)
+
+    def _start_tts_speech(self, text: str):
+        """Dispatches text to the background TTS engine with UI lifecycle hooks."""
+        def on_start():
+            self.after(0, self._on_tts_started)
+
+        def on_finish():
+            self.after(0, self._on_tts_finished)
+
+        speak_text(text, on_start=on_start, on_finish=on_finish)
+
+    def _on_tts_started(self):
+        """Updates the microphone / speaker button to active speaking state."""
+        if hasattr(self, "btn_tts_voice") and self.btn_tts_voice.winfo_exists():
+            self.btn_tts_voice.configure(
+                text="⏹️ Stop Voice",
+                fg_color="#fee2e2",
+                hover_color="#fecaca",
+                text_color="#dc2626",
+                border_color="#f87171"
+            )
+        self._update_status("🔊 Reviver AI is speaking...")
+
+    def _on_tts_finished(self):
+        """Reverts the microphone / speaker button back to idle read-aloud state."""
+        if hasattr(self, "btn_tts_voice") and self.btn_tts_voice.winfo_exists():
+            self.btn_tts_voice.configure(
+                text="🎙️ Read Aloud",
+                fg_color="#f1f5f9",
+                hover_color=COLOR_CARD_HOVER,
+                text_color=COLOR_TEXT_PRIMARY,
+                border_color=COLOR_BORDER
+            )
+        self._update_status("Ready")
+
+    def _toggle_auto_tts(self):
+        """Toggles hands-free auto-reading for all incoming AI responses."""
+        self.auto_read_enabled = not self.auto_read_enabled
+        if self.auto_read_enabled:
+            if hasattr(self, "btn_auto_tts") and self.btn_auto_tts.winfo_exists():
+                self.btn_auto_tts.configure(
+                    text="🔊 Auto-Read: ON",
+                    fg_color="#dbeafe",
+                    hover_color="#bfdbfe",
+                    text_color="#1d4ed8",
+                    border_color="#3b82f6"
+                )
+            if self.last_ai_response:
+                self._start_tts_speech(self.last_ai_response)
+        else:
+            if hasattr(self, "btn_auto_tts") and self.btn_auto_tts.winfo_exists():
+                self.btn_auto_tts.configure(
+                    text="🔊 Auto-Read: OFF",
+                    fg_color="#f1f5f9",
+                    hover_color=COLOR_CARD_HOVER,
+                    text_color=COLOR_TEXT_SECONDARY,
+                    border_color=COLOR_BORDER
+                )
+            if is_speaking():
+                stop_speech()
+                self._on_tts_finished()
+
+    def _create_comprehensive_health_widget(self, parent_frame, score: float):
+        """Creates a comprehensive progress bar + percentage health indicator."""
+        health_frame = ctk.CTkFrame(parent_frame, fg_color="transparent")
+        health_frame.pack(fill="x", padx=10, pady=4)
+
+        # Choose color based on structural score
+        bar_color = "#10b981" if score >= 90 else ("#f59e0b" if score >= 70 else "#ef4444")
+
+        lbl_score = ctk.CTkLabel(
+            health_frame,
+            text=f"Structural Health: {score:.1f}%",
+            font=ctk.CTkFont(family="Consolas", size=11, weight="bold"),
+            text_color=bar_color
+        )
+        lbl_score.pack(side="left", padx=(0, 10))
+
+        progress = ctk.CTkProgressBar(
+            health_frame,
+            width=160,
+            height=12,
+            progress_color=bar_color,
+            fg_color="#e2e8f0"
+        )
+        progress.pack(side="right", fill="x", expand=True)
+        progress.set(max(0.05, score / 100.0))
+        return health_frame
+
+    def _quick_organize_files(self):
+        target_dir = filedialog.askdirectory(title="Select Folder to Organize by File Type")
+        if target_dir and os.path.exists(target_dir):
+            res_msg = organize_folder_by_type(target_dir)
+            self._update_status(res_msg)
+            self.ledger.add_entry("ORGANIZE_FOLDER", {"path": target_dir})
+            messagebox.showinfo("Folder Organized", f"{res_msg}\n\nPath: {target_dir}")
+
+    def _quick_purge_duplicates(self):
+        target_dir = filedialog.askdirectory(title="Select Folder to Scan & Purge Duplicates")
+        if target_dir and os.path.exists(target_dir):
+            msg, dupes = scan_and_purge_duplicates(target_dir, delete_mode=False)
+            self.ledger.add_entry("SCAN_DUPLICATES", {"path": target_dir, "count": len(dupes)})
+            if dupes:
+                confirm = messagebox.askyesno(
+                    "Duplicate Files Found",
+                    f"Found {len(dupes)} duplicate files in:\n{target_dir}\n\nWould you like to purge/delete duplicate copies now?"
+                )
+                if confirm:
+                    msg_del, _ = scan_and_purge_duplicates(target_dir, delete_mode=True)
+                    self.ledger.add_entry("PURGE_DUPLICATES", {"path": target_dir, "purged": len(dupes)})
+                    self._update_status(f"Purged {len(dupes)} duplicates.")
+                    messagebox.showinfo("Purge Complete", f"Successfully cleaned duplicate files.\n{msg_del}")
+                else:
+                    self._update_status(f"Duplicate scan complete: {len(dupes)} copies detected.")
+            else:
+                self._update_status("No duplicate files detected.")
+                messagebox.showinfo("Duplicate Scan", "No duplicate files found in folder.")
+
+    def _build_inspector_contents(self, parent_frame):
+        """Builds all Forensic Inspector payload preview and relationship graph components."""
         # 1. Top Section: Inspector Header & Forensics Telemetry HUD
         self.inspector_header = ctk.CTkFrame(
-            self.right_panel,
-            fg_color="#0d1726",
+            parent_frame,
+            fg_color=COLOR_CARD_BG,
             corner_radius=8,
             border_width=1,
             border_color=COLOR_BORDER
@@ -560,7 +927,7 @@ class ReviverApp(ctk.CTk):
         self.selected_name_lbl = ctk.CTkLabel(
             header_row1,
             text="No Artifact Selected",
-            font=ctk.CTkFont(family="Segoe UI", size=16, weight="bold"),
+            font=ctk.CTkFont(family="Segoe UI", size=15, weight="bold"),
             text_color=COLOR_TEXT_PRIMARY,
             anchor="w"
         )
@@ -574,8 +941,9 @@ class ReviverApp(ctk.CTk):
             btn_frame,
             text="📋 Copy Text",
             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-            fg_color="#131d31",
+            fg_color="#f1f5f9",
             hover_color=COLOR_CARD_HOVER,
+            text_color=COLOR_TEXT_PRIMARY,
             border_width=1,
             border_color=COLOR_BORDER,
             width=96,
@@ -588,8 +956,9 @@ class ReviverApp(ctk.CTk):
             btn_frame,
             text="💾 Export",
             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-            fg_color="#131d31",
+            fg_color="#f1f5f9",
             hover_color=COLOR_CARD_HOVER,
+            text_color=COLOR_TEXT_PRIMARY,
             border_width=1,
             border_color=COLOR_BORDER,
             width=80,
@@ -607,7 +976,7 @@ class ReviverApp(ctk.CTk):
             header_row2,
             text="[UNCLASSIFIED]",
             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-            fg_color="#1e293b",
+            fg_color="#f1f5f9",
             text_color=COLOR_TEXT_SECONDARY,
             corner_radius=4,
             padx=8,
@@ -620,7 +989,7 @@ class ReviverApp(ctk.CTk):
             header_row2,
             text="Priority: N/A",
             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-            fg_color="#1e293b",
+            fg_color="#f1f5f9",
             text_color=COLOR_TEXT_SECONDARY,
             corner_radius=4,
             padx=8,
@@ -633,8 +1002,8 @@ class ReviverApp(ctk.CTk):
             header_row2,
             text="Entropy: --",
             font=ctk.CTkFont(family="Consolas", size=11, weight="bold"),
-            fg_color="#131d31",
-            text_color="#38bdf8",
+            fg_color="#e0f2fe",
+            text_color="#0284c7",
             corner_radius=4,
             padx=8,
             pady=3
@@ -658,7 +1027,7 @@ class ReviverApp(ctk.CTk):
             width=130,
             height=10,
             progress_color="#10b981",
-            fg_color="#131d31"
+            fg_color="#e2e8f0"
         )
         self.integrity_meter.pack(side="left")
         self.integrity_meter.set(0)
@@ -666,7 +1035,7 @@ class ReviverApp(ctk.CTk):
         # Metadata Details Line
         self.lbl_meta_details = ctk.CTkLabel(
             self.inspector_header,
-            text="Select an artifact from the left queue to view forensic recovery preview and relationship graph.",
+            text="Select an artifact from the queue to view forensic recovery preview and relationship graph.",
             font=ctk.CTkFont(family="Consolas", size=11),
             text_color=COLOR_TEXT_SECONDARY,
             anchor="w"
@@ -674,7 +1043,7 @@ class ReviverApp(ctk.CTk):
         self.lbl_meta_details.pack(fill="x", padx=14, pady=(0, 8))
 
         # 2. Middle Section: "Reconstructed Forensic Payload Buffer"
-        content_header_frame = ctk.CTkFrame(self.right_panel, fg_color="transparent")
+        content_header_frame = ctk.CTkFrame(parent_frame, fg_color="transparent")
         content_header_frame.pack(fill="x", padx=14, pady=(4, 2))
 
         content_box_title = ctk.CTkLabel(
@@ -690,8 +1059,8 @@ class ReviverApp(ctk.CTk):
             content_header_frame,
             text="UTF-8 / LATIN-1 AUTO-DECODE",
             font=ctk.CTkFont(family="Consolas", size=9, weight="bold"),
-            fg_color="#131d31",
-            text_color="#38bdf8",
+            fg_color="#e0f2fe",
+            text_color="#0284c7",
             corner_radius=3,
             padx=6,
             pady=1
@@ -699,9 +1068,9 @@ class ReviverApp(ctk.CTk):
         content_badge.pack(side="right")
 
         self.txt_content = ctk.CTkTextbox(
-            self.right_panel,
-            fg_color="#060911",
-            text_color="#e2e8f0",
+            parent_frame,
+            fg_color="#ffffff",
+            text_color=COLOR_TEXT_PRIMARY,
             border_width=1,
             border_color=COLOR_BORDER,
             font=ctk.CTkFont(family="Consolas", size=11),
@@ -712,7 +1081,7 @@ class ReviverApp(ctk.CTk):
         self.txt_content.configure(state="disabled")
 
         # 3. Lower Section: "AI Relationship Map Match & Fragment Graph"
-        rel_header_frame = ctk.CTkFrame(self.right_panel, fg_color="transparent")
+        rel_header_frame = ctk.CTkFrame(parent_frame, fg_color="transparent")
         rel_header_frame.pack(fill="x", padx=14, pady=(2, 2))
 
         rel_box_title = ctk.CTkLabel(
@@ -728,8 +1097,8 @@ class ReviverApp(ctk.CTk):
             rel_header_frame,
             text="MULTI-SECTOR CORRELATION",
             font=ctk.CTkFont(family="Consolas", size=9, weight="bold"),
-            fg_color="#131d31",
-            text_color="#c084fc",
+            fg_color="#f3e8ff",
+            text_color="#7c3aed",
             corner_radius=3,
             padx=6,
             pady=1
@@ -737,10 +1106,10 @@ class ReviverApp(ctk.CTk):
         rel_badge.pack(side="right")
 
         self.txt_relationship_map = ctk.CTkTextbox(
-            self.right_panel,
+            parent_frame,
             height=145,
-            fg_color="#070d18",
-            text_color="#38bdf8",
+            fg_color=COLOR_CARD_BG,
+            text_color=COLOR_ACCENT,
             border_width=1,
             border_color=COLOR_BORDER,
             font=ctk.CTkFont(family="Consolas", size=11),
@@ -750,11 +1119,326 @@ class ReviverApp(ctk.CTk):
         self.txt_relationship_map.insert("1.0", "No active relationship links. Standalone fragment or pending scan.")
         self.txt_relationship_map.configure(state="disabled")
 
+    def _build_ai_chat_contents(self, parent_frame):
+        """Builds the embedded side-panel AI chatbot interface."""
+        # Top banner frame
+        ai_hdr = ctk.CTkFrame(parent_frame, fg_color=COLOR_CARD_BG, corner_radius=8, border_width=1, border_color=COLOR_BORDER)
+        ai_hdr.pack(fill="x", padx=14, pady=12)
+
+        ai_hdr_inner = ctk.CTkFrame(ai_hdr, fg_color="transparent")
+        ai_hdr_inner.pack(fill="x", padx=12, pady=10)
+
+        ctk.CTkLabel(
+            ai_hdr_inner,
+            text="💬 Reviver AI // Neural Forensics Copilot",
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
+            text_color=COLOR_TEXT_PRIMARY
+        ).pack(side="left")
+
+        hdr_right = ctk.CTkFrame(ai_hdr_inner, fg_color="transparent")
+        hdr_right.pack(side="right")
+
+        self.btn_auto_tts = ctk.CTkButton(
+            hdr_right,
+            text="🔊 Auto-Read: OFF",
+            font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+            width=115,
+            height=26,
+            fg_color="#f1f5f9",
+            hover_color=COLOR_CARD_HOVER,
+            text_color=COLOR_TEXT_SECONDARY,
+            border_width=1,
+            border_color=COLOR_BORDER,
+            command=self._toggle_auto_tts
+        )
+        self.btn_auto_tts.pack(side="left", padx=(0, 6))
+
+        copilot_status = ctk.CTkLabel(
+            hdr_right,
+            text="● COPILOT ACTIVE",
+            font=ctk.CTkFont(family="Consolas", size=9, weight="bold"),
+            fg_color="#dcfce7",
+            text_color="#16a34a",
+            corner_radius=4,
+            padx=6,
+            pady=2
+        )
+        copilot_status.pack(side="left", padx=(0, 6))
+
+        # Quick action chips
+        chips_frame = ctk.CTkFrame(parent_frame, fg_color="transparent")
+        chips_frame.pack(fill="x", padx=14, pady=(0, 6))
+
+        def on_quick_action(cmd_text):
+            if hasattr(self, "ai_input_entry"):
+                self.ai_input_entry.delete(0, "end")
+                self.ai_input_entry.insert(0, cmd_text)
+                send_ai_message()
+
+        for lbl, cmd in [
+            ("📊 Summary", "summary"),
+            ("🔴 Threats", "threats"),
+            ("📂 Organize", "organize"),
+            ("🔍 Duplicates", "duplicates"),
+            ("⛏️ Disk Dig", "explain disk dig")
+        ]:
+            b = ctk.CTkButton(
+                chips_frame,
+                text=lbl,
+                font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+                fg_color="#f1f5f9",
+                hover_color=COLOR_CARD_HOVER,
+                text_color=COLOR_TEXT_PRIMARY,
+                border_width=1,
+                border_color=COLOR_BORDER,
+                height=26,
+                command=lambda c=cmd: on_quick_action(c)
+            )
+            b.pack(side="left", padx=2)
+
+        # Chat display box
+        self.ai_chat_textbox = ctk.CTkTextbox(
+            parent_frame,
+            fg_color="#ffffff",
+            text_color=COLOR_TEXT_PRIMARY,
+            font=ctk.CTkFont(family="Consolas", size=11),
+            border_width=1,
+            border_color=COLOR_BORDER,
+            wrap="word"
+        )
+        self.ai_chat_textbox.pack(fill="both", expand=True, padx=14, pady=(0, 8))
+        self.ai_chat_textbox.insert(
+            "1.0",
+            "╔══════════════════════════════════════════════════════════════════════════════╗\n"
+            "║                 REVIVER AI NEURAL COPILOT // LIVE EMBEDDED                   ║\n"
+            "╚══════════════════════════════════════════════════════════════════════════════╝\n"
+            "Copilot connected to local DFIR inference engine and live LLM integration.\n\n"
+            "• Ask anything: 'summary', 'threats', 'passwords', 'ledger status', 'explain entropy'\n"
+            "• File management: 'organize <path>' or 'duplicates <path>'\n"
+            "• Active evidence: Select an artifact on the left to reconstruct damaged text or enhance images.\n"
+            "────────────────────────────────────────────────────────────────────────────────\n\n"
+        )
+        self.ai_chat_textbox.configure(state="disabled")
+
+        # Input Row
+        input_row = ctk.CTkFrame(parent_frame, fg_color="transparent")
+        input_row.pack(fill="x", padx=14, pady=(0, 8))
+
+        self.ai_input_entry = ctk.CTkEntry(
+            input_row,
+            placeholder_text="Ask Reviver AI or type command ('summary', 'organize', 'duplicates')...",
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+            height=38,
+            fg_color="#ffffff",
+            border_color=COLOR_BORDER,
+            text_color=COLOR_TEXT_PRIMARY
+        )
+        self.ai_input_entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
+
+        def send_ai_message(event=None):
+            query = self.ai_input_entry.get().strip()
+            if not query:
+                return
+            self.ai_input_entry.delete(0, "end")
+
+            self.ai_chat_textbox.configure(state="normal")
+            self.ai_chat_textbox.insert("end", f"Investigator > {query}\n")
+
+            q_lower = query.lower()
+
+            if q_lower.startswith("organize") or "organize" in q_lower:
+                parts = query.split(maxsplit=1)
+                target_dir = parts[1].strip() if len(parts) > 1 else ""
+                if not target_dir or not os.path.exists(target_dir):
+                    target_dir = filedialog.askdirectory(title="Select Folder to Organize by File Type")
+                if target_dir and os.path.exists(target_dir):
+                    res_msg = organize_folder_by_type(target_dir)
+                    resp = f"REVIVER AI: {res_msg}\nTarget: {target_dir}"
+                    self.ledger.add_entry("ORGANIZE_FOLDER", {"path": target_dir})
+                else:
+                    resp = "REVIVER AI: Folder organization cancelled or invalid directory specified."
+
+            elif q_lower.startswith("duplicate") or "duplicate" in q_lower or q_lower.startswith("purge"):
+                is_purge = "purge" in q_lower or "delete" in q_lower
+                parts = query.split(maxsplit=1)
+                target_dir = parts[1].strip() if len(parts) > 1 else ""
+                if not target_dir or not os.path.exists(target_dir):
+                    target_dir = filedialog.askdirectory(title="Select Folder to Scan for Duplicates")
+                if target_dir and os.path.exists(target_dir):
+                    msg, dupes = precise_duplicate_scanner(target_dir, delete_duplicates=is_purge)
+                    resp = f"REVIVER AI: {msg}\n"
+                    if dupes:
+                        resp += "Exact duplicate files:\n"
+                        for d in dupes[:5]:
+                            resp += f"  - {os.path.basename(d)}\n"
+                        if len(dupes) > 5:
+                            resp += f"  - ...and {len(dupes) - 5} more files."
+                    self.ledger.add_entry("SCAN_DUPLICATES", {"path": target_dir, "count": len(dupes), "purged": is_purge})
+                else:
+                    resp = "REVIVER AI: Duplicate scan cancelled or invalid directory specified."
+
+            elif any(k in q_lower for k in ["summary", "overview", "results", "status"]):
+                total = len(self.artifacts) if hasattr(self, 'artifacts') else 0
+                crit = sum(1 for a in getattr(self, 'artifacts', []) if "Tier 1" in a.priority_tier or "Critical" in a.priority_tier)
+                sens = sum(1 for a in getattr(self, 'artifacts', []) if "Tier 2" in a.priority_tier or "Sensitive" in a.priority_tier)
+                stitched = sum(1 for a in getattr(self, 'artifacts', []) if a.relationship_links)
+                target = os.path.basename(self.target_file_path) if self.target_file_path else "None"
+                resp = (
+                    f"REVIVER AI:\n"
+                    f"• Target Image : {target}\n"
+                    f"• Total Carved : {total} evidentiary artifacts\n"
+                    f"• Critical Risk: {crit} high-priority vulnerabilities/secrets\n"
+                    f"• Sensitive PII: {sens} records identified\n"
+                    f"• Graph Links  : {stitched} cross-fragment stitched connections\n"
+                    f"• Ledger Height: {len(self.ledger.chain)} immutable SHA-256 blocks"
+                )
+
+            elif any(k in q_lower for k in ["threat", "critical", "secret", "password", "credential"]):
+                crits = [a for a in getattr(self, 'artifacts', []) if "Tier 1" in a.priority_tier or "Critical" in a.priority_tier or "Credential" in a.category]
+                if crits:
+                    resp = f"REVIVER AI: Identified {len(crits)} critical risk items in current workspace:\n"
+                    for c in crits[:4]:
+                        resp += f"  - [{c.artifact_id}] {c.name} ({c.category})\n"
+                    if len(crits) > 4:
+                        resp += f"  - ...and {len(crits) - 4} more."
+                else:
+                    resp = "REVIVER AI: No critical threats currently detected. Run 'Disk Dig' or 'AI Scan' on a target disk image."
+
+            else:
+                sel = getattr(self, "selected_artifact", None)
+                sel_info = f"ID: {sel.artifact_id}, Name: {sel.name}, Category: {sel.category}, Priority: {sel.priority_tier}, Content Preview: {sel.reconstructed_content[:200]}" if sel else "No artifact currently selected."
+                context = (
+                    f"Workspace Target: {os.path.basename(self.target_file_path) if self.target_file_path else 'None'}\n"
+                    f"Total Artifacts Carved: {len(self.artifacts) if hasattr(self, 'artifacts') else 0}\n"
+                    f"Selected Artifact Context: {sel_info}"
+                )
+                resp = query_llm_api(query, context=context)
+
+            self.last_ai_response = resp
+            self.ai_chat_textbox.insert("end", f"{resp}\n\n")
+            self.ai_chat_textbox.configure(state="disabled")
+            self.ai_chat_textbox.see("end")
+
+            if self.auto_read_enabled:
+                self._start_tts_speech(resp)
+
+        self.ai_input_entry.bind("<Return>", send_ai_message)
+
+        btn_send = ctk.CTkButton(
+            input_row,
+            text="Send",
+            width=68,
+            height=38,
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            fg_color=COLOR_ACCENT,
+            hover_color=COLOR_ACCENT_HOVER,
+            text_color="#ffffff",
+            command=send_ai_message
+        )
+        btn_send.pack(side="right")
+
+        self.btn_tts_voice = ctk.CTkButton(
+            input_row,
+            text="🎙️ Read Aloud",
+            width=112,
+            height=38,
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            fg_color="#f1f5f9",
+            hover_color=COLOR_CARD_HOVER,
+            text_color=COLOR_TEXT_PRIMARY,
+            border_width=1,
+            border_color=COLOR_BORDER,
+            command=self._toggle_read_aloud
+        )
+        self.btn_tts_voice.pack(side="right", padx=(0, 6))
+
+        # Enhancement Action Buttons Row
+        enh_row = ctk.CTkFrame(parent_frame, fg_color="transparent")
+        enh_row.pack(fill="x", padx=14, pady=(0, 10))
+
+        def handle_ai_text_enhancement():
+            sel = getattr(self, "selected_artifact", None)
+            if not sel:
+                messagebox.showinfo("Select Artifact", "Please select an artifact from the queue first to reconstruct.")
+                return
+            self.ai_chat_textbox.configure(state="normal")
+            self.ai_chat_textbox.insert("end", f"Investigator > [Requested AI Text Reconstruction for {sel.artifact_id}]\n")
+            enhanced = ai_enhance_missing_text(sel.reconstructed_content)
+            self.ai_chat_textbox.insert("end", f"--- AI TEXT RECONSTRUCTION RESULT ---\n{enhanced}\n\n")
+            self.ai_chat_textbox.configure(state="disabled")
+            self.ai_chat_textbox.see("end")
+            self.ledger.add_entry("AI_TEXT_RECONSTRUCTION", {"artifact_id": sel.artifact_id})
+
+        def handle_ai_image_refinement():
+            sel = getattr(self, "selected_artifact", None)
+            target_data = None
+            if sel and hasattr(sel, "raw_bytes") and sel.raw_bytes:
+                target_data = sel.raw_bytes
+            elif sel and hasattr(sel, "reconstructed_content") and sel.reconstructed_content:
+                target_data = sel.reconstructed_content
+
+            save_path = filedialog.asksaveasfilename(
+                title="Save Forensic Enhanced Image",
+                initialfile="enhanced_carved_image.png",
+                filetypes=[("PNG Image (*.png)", "*.png"), ("JPEG Image (*.jpg)", "*.jpg"), ("All Files", "*.*")]
+            )
+            if save_path:
+                if not target_data:
+                    src_file = filedialog.askopenfilename(
+                        title="Select Image to Refine & Sharpen",
+                        filetypes=[("Image Files", "*.png;*.jpg;*.jpeg;*.bmp;*.gif"), ("All Files", "*.*")]
+                    )
+                    if src_file:
+                        with open(src_file, "rb") as f:
+                            target_data = f.read()
+
+                if target_data:
+                    result = refine_carved_image(target_data, save_path)
+                    if result and os.path.exists(save_path):
+                        self.ai_chat_textbox.configure(state="normal")
+                        self.ai_chat_textbox.insert("end", f"REVIVER AI: Successfully refined and sharpened forensic image!\nSaved to: {save_path}\n\n")
+                        self.ai_chat_textbox.configure(state="disabled")
+                        self.ai_chat_textbox.see("end")
+                        self.ledger.add_entry("IMAGE_ENHANCEMENT", {"output": save_path})
+                        messagebox.showinfo("Image Enhancement Successful", f"Image sharpened and enhanced:\n{save_path}")
+                    else:
+                        messagebox.showwarning("Enhancement Notice", "Could not decode valid image bytes from target data.")
+                else:
+                    messagebox.showinfo("Image Enhancement", "No image data was provided.")
+
+        btn_enhance_text = ctk.CTkButton(
+            enh_row,
+            text="✨ AI Reconstruct Missing Text",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            fg_color="#f1f5f9",
+            hover_color=COLOR_CARD_HOVER,
+            text_color=COLOR_TEXT_PRIMARY,
+            border_width=1,
+            border_color=COLOR_BORDER,
+            height=32,
+            command=handle_ai_text_enhancement
+        )
+        btn_enhance_text.pack(side="left", fill="x", expand=True, padx=(0, 4))
+
+        btn_enhance_img = ctk.CTkButton(
+            enh_row,
+            text="🖼️ AI Enhance Carved Image",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            fg_color="#f1f5f9",
+            hover_color=COLOR_CARD_HOVER,
+            text_color=COLOR_TEXT_PRIMARY,
+            border_width=1,
+            border_color=COLOR_BORDER,
+            height=32,
+            command=handle_ai_image_refinement
+        )
+        btn_enhance_img.pack(side="right", fill="x", expand=True, padx=(4, 0))
+
     # =========================================================================
     # BOTTOM BAR (LIVE STATUS TICKER & PROGRESS)
     # =========================================================================
     def _build_bottom_bar(self):
-        self.bottom_bar = ctk.CTkFrame(self, fg_color=COLOR_PANEL_BG, corner_radius=0, height=36)
+        self.bottom_bar = ctk.CTkFrame(self, fg_color=COLOR_PANEL_BG, corner_radius=0, height=36, border_width=1, border_color=COLOR_BORDER)
         self.bottom_bar.pack(side="bottom", fill="x", padx=0, pady=0)
         self.bottom_bar.pack_propagate(False)
 
@@ -771,9 +1455,9 @@ class ReviverApp(ctk.CTk):
         # Timestamp / Engine Info
         engine_tag = ctk.CTkLabel(
             self.bottom_bar,
-            text="ENGINE: REVIVER-CARVER-v2.4 | INTEGRITY-AUDIT: ACTIVE",
+            text="ENGINE: REVIVER-CARVER-v2.5 | INTEGRITY-AUDIT: ACTIVE",
             font=ctk.CTkFont(family="Consolas", size=10),
-            text_color="#484f58",
+            text_color=COLOR_TEXT_MUTED,
             anchor="e"
         )
         engine_tag.pack(side="right", padx=16, pady=4)
@@ -784,7 +1468,7 @@ class ReviverApp(ctk.CTk):
     def _update_status(self, message: str, is_error: bool = False):
         timestamp = datetime.now().strftime("%H:%M:%S")
         formatted = f"[{timestamp}] {message}"
-        color = "#f85149" if is_error else COLOR_TEXT_SECONDARY
+        color = "#ef4444" if is_error else COLOR_TEXT_SECONDARY
         self.lbl_status.configure(text=formatted, text_color=color)
 
     def _set_status_badge(self, text: str, mode: str = "READY"):
@@ -792,37 +1476,37 @@ class ReviverApp(ctk.CTk):
         if mode == "READY":
             self.status_badge.configure(
                 text=f"● {text}",
-                fg_color="#062e1d",
+                fg_color="#dcfce7",
                 text_color="#10b981"
             )
         elif mode == "SCANNING":
             self.status_badge.configure(
                 text=f"⟳ {text}",
-                fg_color="#361c02",
-                text_color="#f59e0b"
+                fg_color="#dbeafe",
+                text_color="#38bdf8"
             )
             self._pulse_status_badge()
         elif mode == "DONE":
             self.status_badge.configure(
                 text=f"✔ {text}",
-                fg_color="#083344",
-                text_color="#06b6d4"
+                fg_color="#e0f2fe",
+                text_color="#0284c7"
             )
         elif mode == "ERROR":
             self.status_badge.configure(
                 text=f"✖ {text}",
-                fg_color="#450a0a",
+                fg_color="#fee2e2",
                 text_color="#ef4444"
             )
 
     def _pulse_status_badge(self):
-        """Creates a smooth pulsing effect for the status indicator during carving."""
+        """Creates a smooth pulsing neon glow effect during active deep scans."""
         if getattr(self, "status_mode", "") != "SCANNING":
             return
-        curr = self.status_badge.cget("text_color")
-        next_c = "#fde047" if curr == "#f59e0b" else "#f59e0b"
-        self.status_badge.configure(text_color=next_c)
-        self.after(350, self._pulse_status_badge)
+        curr_color = self.status_badge.cget("text_color")
+        next_color = "#2563eb" if curr_color == "#38bdf8" else "#38bdf8"
+        self.status_badge.configure(text_color=next_color)
+        self.after(400, self._pulse_status_badge)
 
     # =========================================================================
     # EVENT HANDLERS
@@ -889,11 +1573,11 @@ class ReviverApp(ctk.CTk):
         ledger_win = ctk.CTkToplevel(self)
         ledger_win.geometry("780x560")
         ledger_win.title("Reviver // Chain of Custody Audit Ledger (SHA-256)")
-        ledger_win.configure(fg_color=COLOR_BG_DARK)
+        ledger_win.configure(fg_color=COLOR_BG_LIGHT)
         ledger_win.after(100, ledger_win.lift)
 
         # Header Frame
-        hdr = ctk.CTkFrame(ledger_win, fg_color=COLOR_PANEL_BG, corner_radius=6)
+        hdr = ctk.CTkFrame(ledger_win, fg_color=COLOR_PANEL_BG, corner_radius=8, border_width=1, border_color=COLOR_BORDER)
         hdr.pack(fill="x", padx=16, pady=(16, 8))
 
         title_lbl = ctk.CTkLabel(
@@ -908,8 +1592,8 @@ class ReviverApp(ctk.CTk):
             hdr,
             text=f"Chain Height: {len(self.ledger.chain)} blocks",
             font=ctk.CTkFont(family="Consolas", size=11, weight="bold"),
-            fg_color="#0e3818",
-            text_color="#3fb950",
+            fg_color="#dcfce7",
+            text_color="#16a34a",
             corner_radius=4,
             padx=10,
             pady=4
@@ -919,8 +1603,8 @@ class ReviverApp(ctk.CTk):
         textbox = ctk.CTkTextbox(
             ledger_win,
             font=ctk.CTkFont(family="Consolas", size=11),
-            fg_color="#0d1117",
-            text_color="#58a6ff",
+            fg_color="#ffffff",
+            text_color="#0f172a",
             border_width=1,
             border_color=COLOR_BORDER,
             wrap="none"
@@ -952,9 +1636,12 @@ class ReviverApp(ctk.CTk):
         btn_copy = ctk.CTkButton(
             btn_frame,
             text="📋 Copy Ledger JSON",
-            font=ctk.CTkFont(family="Segoe UI", size=11),
-            fg_color="#21262d",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            fg_color="#f1f5f9",
             hover_color=COLOR_CARD_HOVER,
+            text_color=COLOR_TEXT_PRIMARY,
+            border_width=1,
+            border_color=COLOR_BORDER,
             command=copy_ledger_json
         )
         btn_copy.pack(side="left")
@@ -963,8 +1650,11 @@ class ReviverApp(ctk.CTk):
             btn_frame,
             text="Close",
             font=ctk.CTkFont(family="Segoe UI", size=11),
-            fg_color="#21262d",
+            fg_color="#f1f5f9",
             hover_color=COLOR_CARD_HOVER,
+            text_color=COLOR_TEXT_PRIMARY,
+            border_width=1,
+            border_color=COLOR_BORDER,
             width=80,
             command=ledger_win.destroy
         )
@@ -975,12 +1665,12 @@ class ReviverApp(ctk.CTk):
         export_win = ctk.CTkToplevel(self)
         export_win.geometry("520x300")
         export_win.title("Reviver // Select Forensic Export Package")
-        export_win.configure(fg_color=COLOR_BG_DARK)
+        export_win.configure(fg_color=COLOR_BG_LIGHT)
         export_win.resizable(False, False)
         export_win.after(100, export_win.lift)
 
         # Header Frame
-        hdr = ctk.CTkFrame(export_win, fg_color=COLOR_PANEL_BG, corner_radius=6)
+        hdr = ctk.CTkFrame(export_win, fg_color=COLOR_PANEL_BG, corner_radius=8, border_width=1, border_color=COLOR_BORDER)
         hdr.pack(fill="x", padx=16, pady=(16, 12))
 
         ctk.CTkLabel(
@@ -1052,8 +1742,9 @@ class ReviverApp(ctk.CTk):
             content_box,
             text="📊 Technical Forensic JSON  (For Courts, DFIR Experts & Hash Chains)",
             font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-            fg_color="#1e293b",
+            fg_color="#f1f5f9",
             hover_color=COLOR_CARD_HOVER,
+            text_color=COLOR_TEXT_PRIMARY,
             border_width=1,
             border_color=COLOR_BORDER,
             height=42,
@@ -1066,8 +1757,9 @@ class ReviverApp(ctk.CTk):
             content_box,
             text="📝 Plain-English Executive Summary  (For Leadership & Non-CS Stakeholders)",
             font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-            fg_color="#1d4ed8",
-            hover_color="#2563eb",
+            fg_color=COLOR_ACCENT,
+            hover_color=COLOR_ACCENT_HOVER,
+            text_color="#ffffff",
             height=42,
             command=export_plain_english
         )
@@ -1078,11 +1770,11 @@ class ReviverApp(ctk.CTk):
         chat_win = ctk.CTkToplevel(self)
         chat_win.geometry("640x700")
         chat_win.title("Reviver // AI Digital Assistant & DFIR Copilot")
-        chat_win.configure(fg_color=COLOR_BG_DARK)
+        chat_win.configure(fg_color=COLOR_BG_LIGHT)
         chat_win.after(100, chat_win.lift)
 
         # Header Frame
-        hdr = ctk.CTkFrame(chat_win, fg_color=COLOR_PANEL_BG, corner_radius=0, height=60)
+        hdr = ctk.CTkFrame(chat_win, fg_color=COLOR_PANEL_BG, corner_radius=0, height=60, border_width=1, border_color=COLOR_BORDER)
         hdr.pack(fill="x")
         hdr.pack_propagate(False)
 
@@ -1096,23 +1788,54 @@ class ReviverApp(ctk.CTk):
             text_color=COLOR_TEXT_PRIMARY
         ).pack(side="left")
 
+        hdr_right_popout = ctk.CTkFrame(hdr_inner, fg_color="transparent")
+        hdr_right_popout.pack(side="right")
+
+        auto_tts_popout_var = tk.BooleanVar(value=self.auto_read_enabled)
+        popout_last_resp = [""]
+
+        def toggle_popout_auto():
+            auto_tts_popout_var.set(not auto_tts_popout_var.get())
+            if auto_tts_popout_var.get():
+                btn_pop_auto.configure(text="🔊 Auto: ON", fg_color="#dbeafe", text_color="#1d4ed8", border_color="#3b82f6")
+                if popout_last_resp[0]:
+                    speak_text(popout_last_resp[0])
+            else:
+                btn_pop_auto.configure(text="🔊 Auto: OFF", fg_color="#f1f5f9", text_color=COLOR_TEXT_SECONDARY, border_color=COLOR_BORDER)
+                stop_speech()
+
+        btn_pop_auto = ctk.CTkButton(
+            hdr_right_popout,
+            text="🔊 Auto: ON" if auto_tts_popout_var.get() else "🔊 Auto: OFF",
+            font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+            width=92,
+            height=26,
+            fg_color="#dbeafe" if auto_tts_popout_var.get() else "#f1f5f9",
+            hover_color=COLOR_CARD_HOVER,
+            text_color="#1d4ed8" if auto_tts_popout_var.get() else COLOR_TEXT_SECONDARY,
+            border_width=1,
+            border_color="#3b82f6" if auto_tts_popout_var.get() else COLOR_BORDER,
+            command=toggle_popout_auto
+        )
+        btn_pop_auto.pack(side="left", padx=(0, 8))
+
         status_chip = ctk.CTkLabel(
-            hdr_inner,
+            hdr_right_popout,
             text="● COPILOT ACTIVE",
             font=ctk.CTkFont(family="Consolas", size=10, weight="bold"),
-            fg_color="#062e1d",
-            text_color="#10b981",
+            fg_color="#dcfce7",
+            text_color="#16a34a",
             corner_radius=4,
             padx=8,
             pady=3
         )
-        status_chip.pack(side="right")
+        status_chip.pack(side="left")
 
         # Chat Display Box
         chat_box = ctk.CTkTextbox(
             chat_win,
-            fg_color="#060911",
-            text_color="#e2e8f0",
+            fg_color="#ffffff",
+            text_color=COLOR_TEXT_PRIMARY,
             font=ctk.CTkFont(family="Consolas", size=11),
             border_width=1,
             border_color=COLOR_BORDER,
@@ -1153,8 +1876,9 @@ class ReviverApp(ctk.CTk):
                 quick_frame,
                 text=q_lbl,
                 font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
-                fg_color="#131d31",
+                fg_color="#f1f5f9",
                 hover_color=COLOR_CARD_HOVER,
+                text_color=COLOR_TEXT_PRIMARY,
                 border_width=1,
                 border_color=COLOR_BORDER,
                 height=26,
@@ -1171,7 +1895,7 @@ class ReviverApp(ctk.CTk):
             placeholder_text="Ask a question or enter command (e.g., 'summary', 'organize', 'duplicates')...",
             font=ctk.CTkFont(family="Segoe UI", size=12),
             height=38,
-            fg_color="#131d31",
+            fg_color="#ffffff",
             border_color=COLOR_BORDER,
             text_color=COLOR_TEXT_PRIMARY
         )
@@ -1275,28 +1999,70 @@ class ReviverApp(ctk.CTk):
                 )
 
             else:
-                resp = (
-                    f"REVIVER AI: Copilot online. Active target: {os.path.basename(self.target_file_path) if self.target_file_path else 'None'}.\n"
-                    f"I can assist you in analyzing carved artifacts, explaining forensic rules, organizing "
-                    f"investigation directories, or scanning for duplicate files via SHA-256."
+                sel = getattr(self, "selected_artifact", None)
+                sel_info = f"ID: {sel.artifact_id}, Name: {sel.name}, Category: {sel.category}, Priority: {sel.priority_tier}, Content Preview: {sel.reconstructed_content[:200]}" if sel else "No artifact currently selected."
+                context = (
+                    f"Workspace Target: {os.path.basename(self.target_file_path) if self.target_file_path else 'None'}\n"
+                    f"Total Artifacts Carved: {len(self.artifacts) if hasattr(self, 'artifacts') else 0}\n"
+                    f"Selected Artifact Context: {sel_info}"
                 )
+                resp = query_llm_api(query, context=context)
 
+            popout_last_resp[0] = resp
+            self.last_ai_response = resp
             chat_box.insert("end", f"{resp}\n\n")
             chat_box.configure(state="disabled")
             chat_box.see("end")
 
+            if auto_tts_popout_var.get():
+                btn_pop_voice.configure(text="⏹️ Stop Voice", fg_color="#fee2e2", text_color="#dc2626", border_color="#f87171")
+                speak_text(
+                    resp,
+                    on_finish=lambda: chat_win.after(0, lambda: btn_pop_voice.configure(text="🎙️ Read Aloud", fg_color="#f1f5f9", text_color=COLOR_TEXT_PRIMARY, border_color=COLOR_BORDER)) if chat_win.winfo_exists() else None
+                )
+
+        def toggle_popout_voice():
+            if is_speaking():
+                stop_speech()
+                btn_pop_voice.configure(text="🎙️ Read Aloud", fg_color="#f1f5f9", text_color=COLOR_TEXT_PRIMARY, border_color=COLOR_BORDER)
+            else:
+                txt = popout_last_resp[0] or user_entry.get().strip() or "Reviver AI copilot is online."
+                btn_pop_voice.configure(text="⏹️ Stop Voice", fg_color="#fee2e2", text_color="#dc2626", border_color="#f87171")
+                speak_text(
+                    txt,
+                    on_finish=lambda: chat_win.after(0, lambda: btn_pop_voice.configure(text="🎙️ Read Aloud", fg_color="#f1f5f9", text_color=COLOR_TEXT_PRIMARY, border_color=COLOR_BORDER)) if chat_win.winfo_exists() else None
+                )
+
         user_entry.bind("<Return>", send_message)
+
         btn_send = ctk.CTkButton(
             input_frame,
             text="Send",
             font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-            width=75,
+            width=70,
             height=38,
             fg_color=COLOR_ACCENT,
             hover_color=COLOR_ACCENT_HOVER,
             command=send_message
         )
         btn_send.pack(side="right")
+
+        btn_pop_voice = ctk.CTkButton(
+            input_frame,
+            text="🎙️ Read Aloud",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            width=112,
+            height=38,
+            fg_color="#f1f5f9",
+            hover_color=COLOR_CARD_HOVER,
+            text_color=COLOR_TEXT_PRIMARY,
+            border_width=1,
+            border_color=COLOR_BORDER,
+            command=toggle_popout_voice
+        )
+        btn_pop_voice.pack(side="right", padx=(0, 6))
+
+        chat_win.protocol("WM_DELETE_WINDOW", lambda: (stop_speech(), chat_win.destroy()))
 
     def _export_artifact(self):
         if not self.selected_artifact:
@@ -1581,8 +2347,8 @@ class ReviverApp(ctk.CTk):
             row1,
             text=f"[{art.artifact_id}]",
             font=ctk.CTkFont(family="Consolas", size=11, weight="bold"),
-            fg_color="#0a1526",
-            text_color="#38bdf8",
+            fg_color="#e0f2fe",
+            text_color="#0284c7",
             corner_radius=4,
             padx=6,
             pady=1
@@ -1605,8 +2371,8 @@ class ReviverApp(ctk.CTk):
                 row1,
                 text="▶ ACTIVE",
                 font=ctk.CTkFont(family="Consolas", size=9, weight="bold"),
-                fg_color="#083344",
-                text_color="#38bdf8",
+                fg_color="#dbeafe",
+                text_color="#2563eb",
                 corner_radius=3,
                 padx=5,
                 pady=1
@@ -1638,7 +2404,7 @@ class ReviverApp(ctk.CTk):
             row2,
             text=pri_short,
             font=ctk.CTkFont(family="Segoe UI", size=9, weight="bold"),
-            fg_color="#1e293b",
+            fg_color="#f1f5f9",
             text_color=palette["text"],
             corner_radius=4,
             padx=6,
@@ -1653,8 +2419,8 @@ class ReviverApp(ctk.CTk):
                 row2,
                 text=f"🔗 Linked ({art.relationship_links[0].confidence:.0f}%)",
                 font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
-                fg_color="#1e1b4b",
-                text_color="#c084fc",
+                fg_color="#f3e8ff",
+                text_color="#7c3aed",
                 corner_radius=4,
                 padx=6,
                 pady=2
@@ -1662,9 +2428,15 @@ class ReviverApp(ctk.CTk):
             badge_stitch.pack(side="right")
             clickable_elements.append(badge_stitch)
 
-        # Row 3: Meta details (Sectors, Entropy, Integrity Health)
+        # Comprehensive Health Progress Bar Widget
+        hw = self._create_comprehensive_health_widget(card, art.integrity_score)
+        clickable_elements.append(hw)
+        for child in hw.winfo_children():
+            clickable_elements.append(child)
+
+        # Row 3: Meta details (Sectors, Byte span, Shannon Entropy)
         row3 = ctk.CTkFrame(card, fg_color="transparent")
-        row3.pack(fill="x", padx=10, pady=(4, 8))
+        row3.pack(fill="x", padx=10, pady=(2, 8))
 
         sector_str = f"Sec {art.metadata.get('sector_span', [])}"
         span_str = art.metadata.get('byte_range', '')
@@ -1677,31 +2449,20 @@ class ReviverApp(ctk.CTk):
         lbl_meta.pack(side="left")
         clickable_elements.extend([row3, lbl_meta])
 
-        # Health pill
-        int_color = "#34d399" if art.integrity_score >= 90 else ("#fbbf24" if art.integrity_score >= 70 else "#f87171")
-        lbl_integ = ctk.CTkLabel(
-            row3,
-            text=f"{art.integrity_score}% Health",
-            font=ctk.CTkFont(family="Consolas", size=10, weight="bold"),
-            text_color=int_color
-        )
-        lbl_integ.pack(side="right")
-        clickable_elements.append(lbl_integ)
-
         # Entropy Mini-Pill
         ent_val = art.metadata.get("average_entropy", 0.0)
-        ent_color = "#f87171" if ent_val >= 7.0 else ("#fbbf24" if ent_val >= 4.5 else "#38bdf8")
+        ent_color = "#b91c1c" if ent_val >= 7.0 else ("#b45309" if ent_val >= 4.5 else "#0284c7")
         lbl_ent = ctk.CTkLabel(
             row3,
             text=f"H:{ent_val:.2f}",
             font=ctk.CTkFont(family="Consolas", size=9, weight="bold"),
-            fg_color="#0b1320",
+            fg_color="#f1f5f9",
             text_color=ent_color,
             corner_radius=3,
             padx=5,
             pady=1
         )
-        lbl_ent.pack(side="right", padx=(0, 6))
+        lbl_ent.pack(side="right", padx=(0, 2))
         clickable_elements.append(lbl_ent)
 
         # Hover and click bindings
@@ -1741,12 +2502,12 @@ class ReviverApp(ctk.CTk):
             text_color=palette["text"]
         )
 
-        pri_color = "#f87171" if "1" in art.priority_tier or "Critical" in art.priority_tier else (
-            "#fbbf24" if "2" in art.priority_tier else "#34d399"
+        pri_color = "#b91c1c" if "1" in art.priority_tier or "Critical" in art.priority_tier else (
+            "#b45309" if "2" in art.priority_tier else "#047857"
         )
         self.badge_priority.configure(
             text=art.priority_tier,
-            fg_color="#131d31",
+            fg_color="#f1f5f9",
             text_color=pri_color
         )
 
@@ -1754,13 +2515,13 @@ class ReviverApp(ctk.CTk):
         ent_val = float(art.metadata.get("average_entropy", 0.0))
         if ent_val >= 7.0:
             ent_desc = "High Density / Packed or Encrypted"
-            ent_color = "#f87171"
+            ent_color = "#b91c1c"
         elif ent_val >= 4.5:
             ent_desc = "Moderate Density / Structured Text or Code"
-            ent_color = "#fbbf24"
+            ent_color = "#b45309"
         else:
             ent_desc = "Low Density / Plain Data or Slack"
-            ent_color = "#38bdf8"
+            ent_color = "#0284c7"
         self.badge_entropy.configure(text=f"Entropy: {ent_val:.2f} ({ent_desc})", text_color=ent_color)
 
         # Integrity Meter
@@ -1776,7 +2537,7 @@ class ReviverApp(ctk.CTk):
             meter_color = "#ef4444"
         self.integrity_meter.configure(progress_color=meter_color)
 
-        self.lbl_integrity_title.configure(text=f"{score}% Valid Structure", text_color=meter_color)
+        self.lbl_integrity_title.configure(text=f"Structural Health: {score:.1f}%", text_color=meter_color)
 
         # Diagnostic metadata line
         diag_items = []
