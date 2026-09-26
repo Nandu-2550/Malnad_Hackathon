@@ -15,8 +15,11 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 import tkinter as tk
 from tkinter import filedialog, messagebox
-
+import io
+import re
+import hashlib
 import customtkinter as ctk
+from PIL import Image, ImageEnhance, ImageFilter
 
 # Ensure local directory is in Python path for engine import
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -180,6 +183,9 @@ class ReviverApp(ctk.CTk):
         self.last_ai_response: str = ""
         self.auto_read_enabled: bool = False
 
+        # Enhanced Evidence Files Tracking
+        self.session_enhanced_files: List[Dict[str, Any]] = []
+
         # Build UI Components
         self._build_top_bar()
         self._build_main_split_layout()
@@ -223,129 +229,74 @@ class ReviverApp(ctk.CTk):
             self,
             fg_color=COLOR_PANEL_BG,
             corner_radius=0,
-            height=72,
+            height=96,
             border_width=1,
             border_color=COLOR_BORDER
         )
         self.top_bar.pack(side="top", fill="x", padx=0, pady=0)
         self.top_bar.pack_propagate(False)
 
-        # Left: High-impact Cyber Command Branding with prominent Logo Emblem
-        brand_frame = ctk.CTkFrame(self.top_bar, fg_color="transparent")
-        brand_frame.pack(side="left", padx=16, pady=6)
-
-        # High-tech Logo Emblem Box
-        logo_emblem = ctk.CTkFrame(
-            brand_frame,
-            width=46,
-            height=46,
-            corner_radius=12,
-            fg_color="#2563eb",
-            border_width=2,
-            border_color="#93c5fd"
-        )
-        logo_emblem.pack(side="left", padx=(0, 12))
-        logo_emblem.pack_propagate(False)
-
-        logo_icon = ctk.CTkLabel(
-            logo_emblem,
-            text="🛡️",
-            font=ctk.CTkFont(size=24)
-        )
-        logo_icon.place(relx=0.5, rely=0.5, anchor="center")
-
-        title_box = ctk.CTkFrame(brand_frame, fg_color="transparent")
-        title_box.pack(side="left")
-
-        # Headline Row: Big Logo-Style Typography + Cyber Tag
-        headline_row = ctk.CTkFrame(title_box, fg_color="transparent")
-        headline_row.pack(anchor="w")
-
-        main_title = ctk.CTkLabel(
-            headline_row,
-            text="REVIVER",
-            font=ctk.CTkFont(family="Bahnschrift", size=26, weight="bold"),
-            text_color="#0f172a"
-        )
-        main_title.pack(side="left", padx=(0, 8))
-
-        ver_badge = ctk.CTkLabel(
-            headline_row,
-            text="v2.5 // CORE",
-            font=ctk.CTkFont(family="Consolas", size=9, weight="bold"),
-            fg_color="#dbeafe",
-            text_color="#1d4ed8",
-            corner_radius=4,
-            padx=6,
-            pady=2
-        )
-        ver_badge.pack(side="left")
-
-        sub_title = ctk.CTkLabel(
-            title_box,
-            text="LIGHT-CYBER DIGITAL EVIDENCE COMMAND CENTER // DFIR SUITE",
-            font=ctk.CTkFont(family="Consolas", size=9, weight="bold"),
-            text_color="#64748b"
-        )
-        sub_title.pack(anchor="w", pady=(1, 0))
-
-        # Right: Telemetry HUD & Status Badge
-        telemetry_frame = ctk.CTkFrame(self.top_bar, fg_color="transparent")
-        telemetry_frame.pack(side="right", padx=16, pady=8)
+        # Left: Live Telemetry HUD Chips
+        left_telemetry_frame = ctk.CTkFrame(self.top_bar, fg_color="transparent")
+        left_telemetry_frame.pack(side="left", padx=18, pady=0)
 
         # High-contrast Cyber Telemetry Chips
         self.stat_fragments_lbl = ctk.CTkLabel(
-            telemetry_frame,
+            left_telemetry_frame,
             text="Fragments: 0",
             font=ctk.CTkFont(family="Consolas", size=11, weight="bold"),
             fg_color="#f1f5f9",
             corner_radius=6,
             padx=10,
-            pady=5,
+            pady=6,
             text_color=COLOR_TEXT_SECONDARY
         )
-        self.stat_fragments_lbl.pack(side="left", padx=4)
+        self.stat_fragments_lbl.pack(side="left", padx=(0, 4))
 
         self.stat_stitched_lbl = ctk.CTkLabel(
-            telemetry_frame,
+            left_telemetry_frame,
             text="Stitched: 0",
             font=ctk.CTkFont(family="Consolas", size=11, weight="bold"),
             fg_color="#e0f2fe",
             corner_radius=6,
             padx=10,
-            pady=5,
+            pady=6,
             text_color="#0284c7"
         )
         self.stat_stitched_lbl.pack(side="left", padx=4)
 
         self.stat_critical_lbl = ctk.CTkLabel(
-            telemetry_frame,
+            left_telemetry_frame,
             text="Critical: 0",
             font=ctk.CTkFont(family="Consolas", size=11, weight="bold"),
             fg_color="#fee2e2",
             corner_radius=6,
             padx=10,
-            pady=5,
+            pady=6,
             text_color="#dc2626"
         )
         self.stat_critical_lbl.pack(side="left", padx=4)
 
+        # Right: Status Badge, Audit Ledger & Export Report Buttons
+        right_actions_frame = ctk.CTkFrame(self.top_bar, fg_color="transparent")
+        right_actions_frame.pack(side="right", padx=18, pady=0)
+
         # Dynamic Pulsing Status Indicator Badge
         self.status_badge = ctk.CTkLabel(
-            telemetry_frame,
+            right_actions_frame,
             text="● SYSTEM READY",
-            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
             fg_color="#dcfce7",
             text_color="#10b981",
             corner_radius=6,
-            padx=12,
-            pady=5
+            padx=11,
+            pady=6
         )
-        self.status_badge.pack(side="left", padx=(6, 8))
+        self.status_badge.pack(side="left", padx=(0, 6))
 
         # Audit Ledger & Export Report Buttons
         self.btn_audit_ledger = ctk.CTkButton(
-            telemetry_frame,
+            right_actions_frame,
             text="🔐 Audit Ledger",
             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
             fg_color="#f1f5f9",
@@ -353,24 +304,71 @@ class ReviverApp(ctk.CTk):
             text_color=COLOR_TEXT_PRIMARY,
             border_width=1,
             border_color=COLOR_BORDER,
-            width=115,
-            height=32,
+            width=112,
+            height=34,
             command=self.open_audit_ledger_window
         )
-        self.btn_audit_ledger.pack(side="left", padx=(2, 4))
+        self.btn_audit_ledger.pack(side="left", padx=(0, 6))
 
         self.btn_export_top = ctk.CTkButton(
-            telemetry_frame,
+            right_actions_frame,
             text="💾 Export Report",
             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
             fg_color=COLOR_ACCENT,
             hover_color=COLOR_ACCENT_HOVER,
             text_color="#ffffff",
-            width=115,
-            height=32,
+            width=112,
+            height=34,
             command=self.handle_export
         )
-        self.btn_export_top.pack(side="left", padx=(2, 0))
+        self.btn_export_top.pack(side="left", padx=0)
+
+        # Center: Prominent Logo Emblem with REVIVER Title Directly Below (Horizontally & Vertically Centered)
+        brand_frame = ctk.CTkFrame(self.top_bar, fg_color="transparent")
+        brand_frame.place(relx=0.5, rely=0.5, anchor="center")
+
+        # Load Custom Shield + Plus Logo
+        logo_dark_path = os.path.join(CURRENT_DIR, "assets", "logo_shield_dark.png")
+        logo_white_path = os.path.join(CURRENT_DIR, "assets", "logo_shield_white.png")
+        if not os.path.exists(logo_dark_path):
+            logo_dark_path = os.path.join(os.path.dirname(CURRENT_DIR), "assets", "logo_shield_dark.png")
+            logo_white_path = os.path.join(os.path.dirname(CURRENT_DIR), "assets", "logo_shield_white.png")
+
+        if os.path.exists(logo_dark_path) and os.path.exists(logo_white_path):
+            try:
+                pil_dark = Image.open(logo_dark_path)
+                pil_white = Image.open(logo_white_path)
+                self.logo_ctk_img = ctk.CTkImage(light_image=pil_dark, dark_image=pil_white, size=(52, 52))
+                logo_icon = ctk.CTkLabel(
+                    brand_frame,
+                    text="",
+                    image=self.logo_ctk_img
+                )
+                logo_icon.pack(side="top", pady=(0, 2))
+            except Exception:
+                logo_icon = ctk.CTkLabel(
+                    brand_frame,
+                    text="🛡️",
+                    font=ctk.CTkFont(size=28)
+                )
+                logo_icon.pack(side="top", pady=(0, 2))
+        else:
+            logo_icon = ctk.CTkLabel(
+                brand_frame,
+                text="🛡️",
+                font=ctk.CTkFont(size=28)
+            )
+            logo_icon.pack(side="top", pady=(0, 2))
+
+        # Professional REVIVER Project Name Directly Below Logo
+        main_title = ctk.CTkLabel(
+            brand_frame,
+            text="REVIVER",
+            font=ctk.CTkFont(family="Bahnschrift", size=17, weight="bold"),
+            text_color="#0f172a"
+        )
+        main_title.pack(side="top")
+        brand_frame.lift()
 
     # =========================================================================
     # 3-COLUMN MAIN LAYOUT SETUP (RESIZABLE PANES)
@@ -1396,46 +1394,53 @@ class ReviverApp(ctk.CTk):
             self.ai_chat_textbox.see("end")
             self.ledger.add_entry("AI_TEXT_RECONSTRUCTION", {"artifact_id": sel.artifact_id})
 
+            # Record in session enhanced files gallery
+            rec_filename = f"reconstructed_{sel.artifact_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            rec_path = os.path.join(CURRENT_DIR, rec_filename)
+            try:
+                with open(rec_path, "w", encoding="utf-8") as f:
+                    f.write(f"// REVIVER AI RECONSTRUCTED EVIDENCE // {sel.artifact_id}\n")
+                    f.write(f"// Category: {sel.category} | Integrity: {sel.integrity_status}\n\n")
+                    f.write(enhanced)
+                self.session_enhanced_files.append({
+                    "type": "Text",
+                    "name": rec_filename,
+                    "path": rec_path,
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "size": os.path.getsize(rec_path),
+                    "hash": hashlib.sha256(enhanced.encode("utf-8")).hexdigest()[:16] + "...",
+                    "details": f"Reconstructed {sel.category} Payload"
+                })
+                self._update_enhanced_button_label()
+                self._update_status(f"✔ Text reconstructed and saved to gallery: {rec_filename}")
+            except Exception:
+                pass
+
         def handle_ai_image_refinement():
             sel = getattr(self, "selected_artifact", None)
             target_data = None
             if sel and hasattr(sel, "raw_bytes") and sel.raw_bytes:
                 target_data = sel.raw_bytes
             elif sel and hasattr(sel, "reconstructed_content") and sel.reconstructed_content:
-                target_data = sel.reconstructed_content
+                content = sel.reconstructed_content
+                if any(sig in content for sig in ["JFIF", "Exif", "PNG", "GIF", "BM", "%PDF"]) or "Image" in getattr(sel, "title", ""):
+                    target_data = content
 
-            save_path = filedialog.asksaveasfilename(
-                title="Save Forensic Enhanced Image",
-                initialfile="enhanced_carved_image.png",
-                filetypes=[("PNG Image (*.png)", "*.png"), ("JPEG Image (*.jpg)", "*.jpg"), ("All Files", "*.*")]
-            )
-            if save_path:
-                if not target_data:
-                    src_file = filedialog.askopenfilename(
-                        title="Select Image to Refine & Sharpen",
-                        filetypes=[("Image Files", "*.png;*.jpg;*.jpeg;*.bmp;*.gif"), ("All Files", "*.*")]
-                    )
-                    if src_file:
-                        with open(src_file, "rb") as f:
-                            target_data = f.read()
-
-                if target_data:
-                    result = refine_carved_image(target_data, save_path)
-                    if result and os.path.exists(save_path):
-                        self.ai_chat_textbox.configure(state="normal")
-                        self.ai_chat_textbox.insert("end", f"REVIVER AI: Successfully refined and sharpened forensic image!\nSaved to: {save_path}\n\n")
-                        self.ai_chat_textbox.configure(state="disabled")
-                        self.ai_chat_textbox.see("end")
-                        self.ledger.add_entry("IMAGE_ENHANCEMENT", {"output": save_path})
-                        messagebox.showinfo("Image Enhancement Successful", f"Image sharpened and enhanced:\n{save_path}")
-                    else:
-                        messagebox.showwarning("Enhancement Notice", "Could not decode valid image bytes from target data.")
+            if target_data:
+                self.open_image_preview_window(target_data)
+            else:
+                src_file = filedialog.askopenfilename(
+                    title="Select Forensic Image to Clarify & Preview",
+                    filetypes=[("Image Files", "*.png;*.jpg;*.jpeg;*.bmp;*.webp;*.gif"), ("All Files", "*.*")]
+                )
+                if src_file:
+                    self.open_image_preview_window(src_file)
                 else:
-                    messagebox.showinfo("Image Enhancement", "No image data was provided.")
+                    self._update_status("Image enhancement cancelled.")
 
         btn_enhance_text = ctk.CTkButton(
             enh_row,
-            text="✨ AI Reconstruct Missing Text",
+            text="✨ Reconstruct Text",
             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
             fg_color="#f1f5f9",
             hover_color=COLOR_CARD_HOVER,
@@ -1445,11 +1450,11 @@ class ReviverApp(ctk.CTk):
             height=32,
             command=handle_ai_text_enhancement
         )
-        btn_enhance_text.pack(side="left", fill="x", expand=True, padx=(0, 4))
+        btn_enhance_text.pack(side="left", fill="x", expand=True, padx=(0, 3))
 
         btn_enhance_img = ctk.CTkButton(
             enh_row,
-            text="🖼️ AI Enhance Carved Image",
+            text="🖼️ Enhance Image",
             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
             fg_color="#f1f5f9",
             hover_color=COLOR_CARD_HOVER,
@@ -1459,7 +1464,21 @@ class ReviverApp(ctk.CTk):
             height=32,
             command=handle_ai_image_refinement
         )
-        btn_enhance_img.pack(side="right", fill="x", expand=True, padx=(4, 0))
+        btn_enhance_img.pack(side="left", fill="x", expand=True, padx=3)
+
+        self.btn_view_enhanced = ctk.CTkButton(
+            enh_row,
+            text="📁 Enhanced (0)",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            fg_color="#f1f5f9",
+            hover_color=COLOR_CARD_HOVER,
+            text_color=COLOR_TEXT_PRIMARY,
+            border_width=1,
+            border_color=COLOR_BORDER,
+            height=32,
+            command=self.open_enhanced_files_manager
+        )
+        self.btn_view_enhanced.pack(side="right", fill="x", expand=True, padx=(3, 0))
 
     # =========================================================================
     # BOTTOM BAR (LIVE STATUS TICKER & PROGRESS)
@@ -1808,6 +1827,453 @@ class ReviverApp(ctk.CTk):
             command=export_plain_english
         )
         btn_text.pack(fill="x", pady=6)
+
+    def _update_enhanced_button_label(self):
+        if hasattr(self, "btn_view_enhanced") and self.btn_view_enhanced:
+            count = len(self.session_enhanced_files)
+            self.btn_view_enhanced.configure(text=f"📁 Enhanced ({count})")
+
+    def open_image_preview_window(self, image_path_or_bytes=None):
+        """Opens a native desktop preview modal showing original vs enhanced image before export."""
+        preview_win = ctk.CTkToplevel(self)
+        preview_win.geometry("820x640")
+        preview_win.minsize(740, 580)
+        preview_win.title("Reviver // Evidence Image Clarification & Pre-Export Preview")
+        preview_win.configure(fg_color=COLOR_BG_LIGHT)
+        preview_win.after(100, preview_win.lift)
+
+        # Header Title Frame
+        hdr = ctk.CTkFrame(preview_win, fg_color=COLOR_PANEL_BG, corner_radius=8, border_width=1, border_color=COLOR_BORDER)
+        hdr.pack(fill="x", padx=16, pady=(16, 8))
+
+        title_lbl = ctk.CTkLabel(
+            hdr,
+            text="🔍 Forensic Image Clarification & Pre-Export Preview",
+            font=ctk.CTkFont(family="Segoe UI", size=15, weight="bold"),
+            text_color=COLOR_TEXT_PRIMARY
+        )
+        title_lbl.pack(side="left", padx=14, pady=10)
+
+        badge_lbl = ctk.CTkLabel(
+            hdr,
+            text="AI CONTRAST & SHARPENING",
+            font=ctk.CTkFont(family="Consolas", size=10, weight="bold"),
+            fg_color="#e0f2fe",
+            text_color="#0284c7",
+            corner_radius=4,
+            padx=8,
+            pady=3
+        )
+        badge_lbl.pack(side="right", padx=14, pady=10)
+
+        # Main Comparison Frame (Side-by-Side: Original vs Enhanced)
+        display_frame = ctk.CTkFrame(preview_win, fg_color=COLOR_PANEL_BG, corner_radius=8, border_width=1, border_color=COLOR_BORDER)
+        display_frame.pack(fill="both", expand=True, padx=16, pady=8)
+
+        enhanced_pil = None
+        raw_img = None
+        orig_w, orig_h = (0, 0)
+
+        # Check if user needs to pick an image
+        if image_path_or_bytes is None:
+            image_path_or_bytes = filedialog.askopenfilename(
+                title="Select Forensic Image to Preview & Enhance",
+                filetypes=[("Image Files", "*.png;*.jpg;*.jpeg;*.bmp;*.webp;*.gif"), ("All Files", "*.*")]
+            )
+
+        if not image_path_or_bytes:
+            preview_win.destroy()
+            return
+
+        try:
+            # 1. Parse Image Source
+            if isinstance(image_path_or_bytes, bytes):
+                raw_img = Image.open(io.BytesIO(image_path_or_bytes))
+            elif isinstance(image_path_or_bytes, str):
+                if os.path.exists(image_path_or_bytes):
+                    raw_img = Image.open(image_path_or_bytes)
+                else:
+                    # Attempt hex decode
+                    clean_hex = re.sub(r'[^0-9a-fA-F]', '', image_path_or_bytes)
+                    if len(clean_hex) >= 32:
+                        raw_bytes = bytes.fromhex(clean_hex)
+                        raw_img = Image.open(io.BytesIO(raw_bytes))
+                    else:
+                        raise ValueError("Target stream does not contain readable image header bytes.")
+
+            if raw_img.mode in ("CMYK", "P", "RGBA"):
+                raw_rgb = raw_img.convert("RGB")
+            else:
+                raw_rgb = raw_img.copy()
+
+            orig_w, orig_h = raw_img.size
+
+            # 2. Forensic Enhancement Algorithm (Dynamic Contrast 1.45x + Sharpening)
+            enhancer = ImageEnhance.Contrast(raw_rgb)
+            enhanced_pil = enhancer.enhance(1.45).filter(ImageFilter.SHARPEN)
+
+            # 3. Calculate Aspect-Ratio Preserving Preview Dimensions (max 320x320)
+            max_size = 320
+            ratio = min(max_size / max(1, orig_w), max_size / max(1, orig_h))
+            disp_w = max(30, int(orig_w * ratio))
+            disp_h = max(30, int(orig_h * ratio))
+
+            orig_ctk = ctk.CTkImage(light_image=raw_rgb, dark_image=raw_rgb, size=(disp_w, disp_h))
+            enh_ctk = ctk.CTkImage(light_image=enhanced_pil, dark_image=enhanced_pil, size=(disp_w, disp_h))
+
+            # Store references on window to prevent garbage collection
+            preview_win._orig_img_ref = orig_ctk
+            preview_win._enh_img_ref = enh_ctk
+
+            # Split comparison containers
+            cols_frame = ctk.CTkFrame(display_frame, fg_color="transparent")
+            cols_frame.pack(fill="both", expand=True, padx=12, pady=12)
+
+            # Left Panel: Original
+            left_box = ctk.CTkFrame(cols_frame, fg_color=COLOR_CARD_BG, corner_radius=8, border_width=1, border_color=COLOR_BORDER)
+            left_box.pack(side="left", fill="both", expand=True, padx=(0, 6))
+
+            ctk.CTkLabel(
+                left_box,
+                text="Original Carved Sector",
+                font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+                text_color=COLOR_TEXT_PRIMARY
+            ).pack(pady=(10, 2))
+
+            ctk.CTkLabel(
+                left_box,
+                text=f"Resolution: {orig_w}x{orig_h} • Mode: {raw_img.mode}",
+                font=ctk.CTkFont(family="Consolas", size=9),
+                text_color=COLOR_TEXT_SECONDARY
+            ).pack(pady=(0, 8))
+
+            img_lbl_left = ctk.CTkLabel(left_box, text="", image=orig_ctk)
+            img_lbl_left.pack(expand=True, padx=10, pady=10)
+
+            # Right Panel: Enhanced
+            right_box = ctk.CTkFrame(cols_frame, fg_color=COLOR_CARD_BG, corner_radius=8, border_width=1, border_color="#93c5fd")
+            right_box.pack(side="right", fill="both", expand=True, padx=(6, 0))
+
+            ctk.CTkLabel(
+                right_box,
+                text="✨ AI / Forensic Enhanced",
+                font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+                text_color=COLOR_ACCENT
+            ).pack(pady=(10, 2))
+
+            ctk.CTkLabel(
+                right_box,
+                text="Bilateral Contrast 1.45x • Laplacian Edge Sharpened",
+                font=ctk.CTkFont(family="Consolas", size=9, weight="bold"),
+                text_color="#0284c7"
+            ).pack(pady=(0, 8))
+
+            img_lbl_right = ctk.CTkLabel(right_box, text="", image=enh_ctk)
+            img_lbl_right.pack(expand=True, padx=10, pady=10)
+
+        except Exception as e:
+            enhanced_pil = None
+            err_box = ctk.CTkFrame(display_frame, fg_color="#fef2f2", corner_radius=8, border_width=1, border_color="#fca5a5")
+            err_box.pack(fill="both", expand=True, padx=20, pady=20)
+            ctk.CTkLabel(
+                err_box,
+                text=f"⚠️ Image Preview Notice\n\nCould not decode target as an image stream:\n{e}\n\nTip: Select a carved image artifact or choose an image file from disk.",
+                font=ctk.CTkFont(family="Segoe UI", size=12),
+                text_color="#b91c1c",
+                justify="center"
+            ).pack(expand=True)
+
+        # Bottom Action Bar
+        action_bar = ctk.CTkFrame(preview_win, fg_color=COLOR_PANEL_BG, corner_radius=8, border_width=1, border_color=COLOR_BORDER)
+        action_bar.pack(fill="x", padx=16, pady=(0, 16))
+
+        def save_and_export():
+            if enhanced_pil is None:
+                messagebox.showerror("Error", "No enhanced image available to export.")
+                return
+
+            default_name = f"reviver_enhanced_evidence_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+            save_path = filedialog.asksaveasfilename(
+                title="Save Enhanced Evidence Image",
+                initialfile=default_name,
+                filetypes=[("PNG Image (*.png)", "*.png"), ("JPEG Image (*.jpg)", "*.jpg"), ("All Files", "*.*")]
+            )
+            if save_path:
+                try:
+                    enhanced_pil.save(save_path)
+                    f_size = os.path.getsize(save_path)
+                    with open(save_path, "rb") as f:
+                        f_hash = hashlib.sha256(f.read()).hexdigest()
+
+                    entry = {
+                        "type": "Image",
+                        "name": os.path.basename(save_path),
+                        "path": save_path,
+                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "size": f_size,
+                        "hash": f_hash[:16] + "...",
+                        "details": f"Sharpened Forensic PNG ({orig_w}x{orig_h})"
+                    }
+                    self.session_enhanced_files.append(entry)
+                    self._update_enhanced_button_label()
+                    self.ledger.add_entry("EXPORT_ENHANCED_IMAGE", {"path": save_path, "sha256": f_hash})
+                    self._update_status(f"✔ Enhanced image exported successfully: {os.path.basename(save_path)}")
+
+                    messagebox.showinfo(
+                        "Export Successful",
+                        f"Enhanced image successfully saved!\n\nFile: {os.path.basename(save_path)}\nPath: {save_path}\nSHA-256: {f_hash[:32]}...\n\nAdded to Enhanced Evidence Gallery."
+                    )
+                    preview_win.destroy()
+                    self.open_enhanced_files_manager()
+                except Exception as ex:
+                    messagebox.showerror("Export Error", f"Failed to save image: {ex}")
+
+        btn_save = ctk.CTkButton(
+            action_bar,
+            text="💾 Save / Export Enhanced Image",
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            fg_color=COLOR_ACCENT,
+            hover_color=COLOR_ACCENT_HOVER,
+            text_color="#ffffff",
+            height=36,
+            command=save_and_export
+        )
+        btn_save.pack(side="right", padx=12, pady=10)
+
+        btn_mgr = ctk.CTkButton(
+            action_bar,
+            text="📁 View All Enhanced Files",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            fg_color="#f1f5f9",
+            hover_color=COLOR_CARD_HOVER,
+            text_color=COLOR_TEXT_PRIMARY,
+            border_width=1,
+            border_color=COLOR_BORDER,
+            height=36,
+            command=self.open_enhanced_files_manager
+        )
+        btn_mgr.pack(side="right", padx=(0, 6), pady=10)
+
+        btn_cancel = ctk.CTkButton(
+            action_bar,
+            text="Close",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            fg_color="#f1f5f9",
+            hover_color=COLOR_CARD_HOVER,
+            text_color=COLOR_TEXT_SECONDARY,
+            border_width=1,
+            border_color=COLOR_BORDER,
+            height=36,
+            width=80,
+            command=preview_win.destroy
+        )
+        btn_cancel.pack(side="left", padx=12, pady=10)
+
+    def open_enhanced_files_manager(self):
+        """Opens a modal gallery showing all enhanced files processed during this session."""
+        mgr_win = ctk.CTkToplevel(self)
+        mgr_win.geometry("740x540")
+        mgr_win.minsize(660, 440)
+        mgr_win.title("Reviver // Enhanced Evidence Gallery & Files Manager")
+        mgr_win.configure(fg_color=COLOR_BG_LIGHT)
+        mgr_win.after(100, mgr_win.lift)
+
+        # Header Frame
+        hdr = ctk.CTkFrame(mgr_win, fg_color=COLOR_PANEL_BG, corner_radius=8, border_width=1, border_color=COLOR_BORDER)
+        hdr.pack(fill="x", padx=16, pady=(16, 8))
+
+        ctk.CTkLabel(
+            hdr,
+            text="📁 Session Enhanced Evidence Gallery",
+            font=ctk.CTkFont(family="Segoe UI", size=15, weight="bold"),
+            text_color=COLOR_TEXT_PRIMARY
+        ).pack(side="left", padx=14, pady=10)
+
+        count = len(self.session_enhanced_files)
+        ctk.CTkLabel(
+            hdr,
+            text=f"{count} File(s) Processed",
+            font=ctk.CTkFont(family="Consolas", size=11, weight="bold"),
+            fg_color="#dbeafe",
+            text_color="#1d4ed8",
+            corner_radius=4,
+            padx=10,
+            pady=4
+        ).pack(side="right", padx=14, pady=10)
+
+        # Scrollable items area
+        scroll_frame = ctk.CTkScrollableFrame(mgr_win, fg_color=COLOR_PANEL_BG, corner_radius=8, border_width=1, border_color=COLOR_BORDER)
+        scroll_frame.pack(fill="both", expand=True, padx=16, pady=8)
+
+        if not self.session_enhanced_files:
+            empty_box = ctk.CTkFrame(scroll_frame, fg_color="transparent")
+            empty_box.pack(expand=True, fill="both", pady=60)
+            ctk.CTkLabel(
+                empty_box,
+                text="📁",
+                font=ctk.CTkFont(size=42)
+            ).pack(pady=(0, 6))
+            ctk.CTkLabel(
+                empty_box,
+                text="No enhanced files processed in this session yet.",
+                font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
+                text_color=COLOR_TEXT_PRIMARY
+            ).pack()
+            ctk.CTkLabel(
+                empty_box,
+                text="Use '🖼️ Enhance Image' or '✨ Reconstruct Text' to clarify and export evidence.",
+                font=ctk.CTkFont(family="Segoe UI", size=11),
+                text_color=COLOR_TEXT_SECONDARY
+            ).pack(pady=(4, 16))
+
+            def pick_and_enhance():
+                mgr_win.destroy()
+                self.open_image_preview_window(None)
+
+            ctk.CTkButton(
+                empty_box,
+                text="➕ Select Image to Clarify & Preview",
+                font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+                fg_color=COLOR_ACCENT,
+                hover_color=COLOR_ACCENT_HOVER,
+                text_color="#ffffff",
+                height=34,
+                command=pick_and_enhance
+            ).pack()
+        else:
+            for item in reversed(self.session_enhanced_files):
+                card = ctk.CTkFrame(scroll_frame, fg_color=COLOR_CARD_BG, corner_radius=8, border_width=1, border_color=COLOR_BORDER)
+                card.pack(fill="x", pady=4, padx=4)
+
+                # Icon indicator
+                icon_text = "🖼️" if item.get("type") == "Image" else "📄"
+                icon_lbl = ctk.CTkLabel(
+                    card,
+                    text=icon_text,
+                    font=ctk.CTkFont(size=22),
+                    width=40
+                )
+                icon_lbl.pack(side="left", padx=(10, 6))
+
+                # Text details
+                info_box = ctk.CTkFrame(card, fg_color="transparent")
+                info_box.pack(side="left", fill="both", expand=True, pady=8)
+
+                ctk.CTkLabel(
+                    info_box,
+                    text=item.get("name", "Unknown File"),
+                    font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+                    text_color=COLOR_TEXT_PRIMARY,
+                    anchor="w"
+                ).pack(anchor="w")
+
+                sub_desc = f"{item.get('details', '')}  │  {item.get('size', 0):,} bytes  │  Saved: {item.get('timestamp', '')}"
+                ctk.CTkLabel(
+                    info_box,
+                    text=sub_desc,
+                    font=ctk.CTkFont(family="Consolas", size=9),
+                    text_color=COLOR_TEXT_SECONDARY,
+                    anchor="w"
+                ).pack(anchor="w", pady=(1, 0))
+
+                # Actions
+                btn_box = ctk.CTkFrame(card, fg_color="transparent")
+                btn_box.pack(side="right", padx=10, pady=8)
+
+                file_path = item.get("path", "")
+
+                def make_preview_cmd(p=file_path, t=item.get("type")):
+                    def cmd():
+                        if t == "Image":
+                            mgr_win.destroy()
+                            self.open_image_preview_window(p)
+                        else:
+                            try:
+                                with open(p, "r", encoding="utf-8") as f:
+                                    txt_content = f.read()
+                                win = ctk.CTkToplevel(self)
+                                win.geometry("600x400")
+                                win.title(f"Reviver // Reconstructed Text: {os.path.basename(p)}")
+                                tb = ctk.CTkTextbox(win, font=ctk.CTkFont(family="Consolas", size=11))
+                                tb.pack(fill="both", expand=True, padx=10, pady=10)
+                                tb.insert("1.0", txt_content)
+                                tb.configure(state="disabled")
+                            except Exception as ex:
+                                messagebox.showerror("Read Error", f"Cannot open file: {ex}")
+                    return cmd
+
+                def make_open_folder_cmd(p=file_path):
+                    def cmd():
+                        if os.path.exists(p):
+                            try:
+                                import subprocess
+                                subprocess.Popen(f'explorer /select,"{os.path.abspath(p)}"')
+                            except Exception:
+                                os.startfile(os.path.dirname(os.path.abspath(p)))
+                        else:
+                            messagebox.showwarning("Notice", "File no longer exists on disk.")
+                    return cmd
+
+                btn_prev = ctk.CTkButton(
+                    btn_box,
+                    text="🔍 Preview",
+                    width=75,
+                    height=28,
+                    font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+                    fg_color=COLOR_ACCENT,
+                    hover_color=COLOR_ACCENT_HOVER,
+                    text_color="#ffffff",
+                    command=make_preview_cmd()
+                )
+                btn_prev.pack(side="left", padx=2)
+
+                btn_fld = ctk.CTkButton(
+                    btn_box,
+                    text="📂 Open Folder",
+                    width=85,
+                    height=28,
+                    font=ctk.CTkFont(family="Segoe UI", size=10),
+                    fg_color="#f1f5f9",
+                    hover_color=COLOR_CARD_HOVER,
+                    text_color=COLOR_TEXT_PRIMARY,
+                    border_width=1,
+                    border_color=COLOR_BORDER,
+                    command=make_open_folder_cmd()
+                )
+                btn_fld.pack(side="left", padx=2)
+
+        # Bottom Bar
+        b_bar = ctk.CTkFrame(mgr_win, fg_color=COLOR_PANEL_BG, corner_radius=8, border_width=1, border_color=COLOR_BORDER)
+        b_bar.pack(fill="x", padx=16, pady=(0, 16))
+
+        def add_more():
+            mgr_win.destroy()
+            self.open_image_preview_window(None)
+
+        ctk.CTkButton(
+            b_bar,
+            text="➕ Enhance Another Image",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            fg_color=COLOR_ACCENT,
+            hover_color=COLOR_ACCENT_HOVER,
+            text_color="#ffffff",
+            height=34,
+            command=add_more
+        ).pack(side="left", padx=12, pady=8)
+
+        ctk.CTkButton(
+            b_bar,
+            text="Close",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            fg_color="#f1f5f9",
+            hover_color=COLOR_CARD_HOVER,
+            text_color=COLOR_TEXT_SECONDARY,
+            border_width=1,
+            border_color=COLOR_BORDER,
+            width=80,
+            height=34,
+            command=mgr_win.destroy
+        ).pack(side="right", padx=12, pady=8)
 
     def open_reviver_chatbot(self):
         """Opens the local AI assistant 'REVIVER' interactive chat window."""
