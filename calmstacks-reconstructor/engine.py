@@ -26,6 +26,8 @@ try:
     _env_candidates = [
         os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"),
         os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env.example"),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env.example"),
         r"C:\Projects\Devru_project\.env",
         r"C:\Projects\.env",
     ]
